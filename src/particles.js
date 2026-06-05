@@ -5,7 +5,11 @@
 
 import { clamp, hexToRgba } from './utils.js';
 
-const PALETTE = ['#5de4f5', '#a78bfa', '#34d399', '#f59e0b', '#f472b6'];
+// Ocean palette — cohesive cool "underwater" tones (cyan, teal, soft blue,
+// deep-sea violet). In Milestone 5 this moves into the Ocean biome definition.
+const PALETTE = ['#5de4f5', '#34d399', '#60a5fa', '#a78bfa'];
+const SPECIAL_COLOR = '#ff8fab';   // rare warm coral pip — a treat amid the cool
+const SPECIAL_CHANCE = 0.08;       // ~8% of motes are special
 const MAX_PARTICLES = 80;
 const EDGE_MARGIN = 40;   // keep spawns away from the very edges
 const PLAYER_SIZE_CAP = 80;
@@ -24,12 +28,22 @@ class Particle {
   reset(width, height) {
     this.x = rand(EDGE_MARGIN, width - EDGE_MARGIN);
     this.y = rand(EDGE_MARGIN, height - EDGE_MARGIN);
-    this.size = rand(3, 12);
-    this.color = PALETTE[(Math.random() * PALETTE.length) | 0];
-    this.opacity = rand(0.4, 1.0);
     this.driftX = rand(-0.3, 0.3);      // px per ~16.67ms frame
     this.driftY = rand(-0.3, 0.3);
     this.pulseOffset = rand(0, Math.PI * 2);
+
+    // Rare warm "special" mote: brighter and a little bigger so it stands out
+    // against the cool palette. Worth more growth when absorbed.
+    this.special = Math.random() < SPECIAL_CHANCE;
+    if (this.special) {
+      this.color = SPECIAL_COLOR;
+      this.size = rand(8, 14);
+      this.opacity = rand(0.85, 1.0);
+    } else {
+      this.color = PALETTE[(Math.random() * PALETTE.length) | 0];
+      this.size = rand(3, 12);
+      this.opacity = rand(0.4, 1.0);
+    }
   }
 }
 
@@ -105,8 +119,10 @@ export class ParticleSystem {
 
   /** Absorb a particle: grow the player, throw sparkles, recycle the mote. */
   _absorb(p, player, w, h) {
-    player.size = clamp(player.size + 0.5, 0, PLAYER_SIZE_CAP);
-    for (let i = 0; i < 4; i++) {
+    const growth = p.special ? 1.2 : 0.5;   // special coral motes are worth more
+    const sparks = p.special ? 8 : 4;
+    player.size = clamp(player.size + growth, 0, PLAYER_SIZE_CAP);
+    for (let i = 0; i < sparks; i++) {
       this.sparkles.push(new Sparkle(p.x, p.y, p.color));
     }
     p.reset(w, h);   // recycle in place — no allocation, count stays at 80
@@ -122,7 +138,7 @@ export class ParticleSystem {
       const pulse = 0.85 + 0.15 * Math.sin(now * 0.004 + p.pulseOffset);
       const r = p.size * pulse;
       ctx.shadowColor = p.color;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = p.special ? 22 : 14;   // special motes bloom brighter
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
       g.addColorStop(0, hexToRgba('#ffffff', p.opacity));
       g.addColorStop(0.4, hexToRgba(p.color, p.opacity));
