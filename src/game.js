@@ -5,6 +5,7 @@
 import { clamp, lerp } from './utils.js';
 import { Player } from './player.js';
 import { ParticleSystem } from './particles.js';
+import { Camera } from './camera.js';
 
 export class Game {
   /**
@@ -15,17 +16,26 @@ export class Game {
     this.canvas = canvas;
     this.ctx = ctx;
 
-    // The player creature. Input (main.js) steers it via player.targetX/Y.
+    // Logical size in CSS pixels (what all game systems work in). Set FIRST —
+    // the camera and particle field below depend on it. Falls back to the
+    // window size because clientWidth/Height can be 0 before layout. The canvas
+    // backing buffer may be larger on high-DPI screens; main.js keeps these in
+    // sync via resize().
+    this.width = canvas.clientWidth || window.innerWidth;
+    this.height = canvas.clientHeight || window.innerHeight;
+
+    // The player creature (a physics body).
     this.player = new Player(canvas, ctx);
 
-    // The field of absorbable light particles.
-    this.particles = new ParticleSystem(canvas);
+    // Steering input in WORLD coordinates, written by main.js each event.
+    this.input = { thrusting: false, aimX: this.player.x, aimY: this.player.y };
 
-    // Logical size in CSS pixels (what all game systems work in). The canvas
-    // backing buffer may be larger on high-DPI screens; main.js keeps these
-    // in sync via resize().
-    this.width = canvas.clientWidth;
-    this.height = canvas.clientHeight;
+    // Follow-camera, snapped to frame the creature at startup (no opening jolt).
+    this.camera = new Camera();
+    this.camera.snapTo(this.player.x, this.player.y, this.width, this.height);
+
+    // The field of light motes, spawned across the initial view.
+    this.particles = new ParticleSystem(canvas, this._view());
 
     this.running = false;
     this.lastTime = 0;     // timestamp of the previous frame (ms)
@@ -38,6 +48,11 @@ export class Game {
   resize(width, height) {
     this.width = width;
     this.height = height;
+  }
+
+  /** Current world-space view rectangle (camera position + screen size). */
+  _view() {
+    return { x: this.camera.x, y: this.camera.y, w: this.width, h: this.height };
   }
 
   /** Begin the loop. */
@@ -90,21 +105,25 @@ export class Game {
    * Systems get wired in over the coming milestones.
    */
   update(deltaTime) {
-    this.player.update(deltaTime);
-    this.particles.update(deltaTime, this.player);
+    this.player.update(deltaTime, this.input);
+    this.camera.follow(this.player.x, this.player.y, this.width, this.height, deltaTime);
+    this.particles.update(deltaTime, this.player, this._view());
     // world / ui updates arrive in later milestones.
   }
 
-  /** Render: clear the ocean, draw particles, then the creature on top. */
+  /** Render: clear the ocean (screen-space), then draw the world via camera. */
   draw() {
     const { ctx } = this;
     ctx.fillStyle = '#050a14';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    ctx.save();
+    this.camera.apply(ctx);
     this.particles.draw(ctx);
     this.player.draw(ctx);
+    ctx.restore();
 
-    this._drawFps(ctx);
+    this._drawFps(ctx);   // HUD stays screen-fixed
   }
 
   /** Tiny, unobtrusive FPS readout, top-left. */

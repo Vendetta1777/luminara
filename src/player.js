@@ -1,10 +1,10 @@
-// player.js — the player's creature.
-// A bioluminescent organism (not a hard disc): a softly morphing membrane with
-// a glowing rim, an uneven inner glow, drifting photophores, and an irregular
-// shimmer. Owns movement toward the cursor, the comet trail, and the pulse.
-// The evolution system (Wisp -> Jellyling -> Glowfin -> Deepmanta) arrives in M6.
+// player.js — the player's creature, now a physics body.
+// A bioluminescent organism: softly morphing membrane, glowing rim, drifting
+// nucleus, twinkling photophores. Moves with momentum through the water —
+// buoyant sink + drag — steered (temporarily) by hold-to-thrust. Milestone 6
+// replaces that with charge-and-release Pulse-Jet.
 
-import { lerp, hexToRgba, smoothFactor } from './utils.js';
+import { hexToRgba } from './utils.js';
 
 export class Player {
   /**
@@ -15,30 +15,29 @@ export class Player {
     this.canvas = canvas;
     this.ctx = ctx;
 
-    const cx = (canvas.clientWidth || window.innerWidth) / 2;
-    const cy = (canvas.clientHeight || window.innerHeight) / 2;
-    this.x = cx;
-    this.y = cy;
-    this.targetX = cx;
-    this.targetY = cy;
+    // World-space position. The camera frames the view around this.
+    this.x = (canvas.clientWidth || window.innerWidth) / 2;
+    this.y = (canvas.clientHeight || window.innerHeight) / 2;
 
-    this.size = 20;          // current radius in CSS pixels (grows in M4)
-    this.speed = 4;          // retained for guide fidelity / future tuning
-    this.smoothing = 0.16;   // glide easing strength (per 16.67ms)
+    // --- Physics body ---
+    this.vx = 0;
+    this.vy = 0;
+    this.sinkAccel = 0.018;    // gentle downward buoyant pull (px / frame²)
+    this.thrustAccel = 0.55;   // TEMP hold-to-thrust strength (replaced in M6)
+    this.drag = 0.94;          // water resistance per ~16.67ms frame (0..1)
+    this.maxSpeed = 14;        // clamp so motion never runs away
 
-    this.color = '#5de4f5';       // body tint
-    this.glowColor = '#5de4f5';   // halo / trail / rim tint
-    this.accentColor = '#d7fbff'; // pale highlight for rim + nucleus
-    this.pulseSpeed = 1.0;        // breathing rate (varies per evolution later)
+    this.size = 20;
+    this.color = '#5de4f5';
+    this.glowColor = '#5de4f5';
+    this.accentColor = '#d7fbff';
+    this.pulseSpeed = 1.0;
 
-    // Comet trail: most-recent position is last in the array.
     this.maxTrail = 22;
     this.trailPoints = [];
 
-    // Per-creature membrane harmonics — random phases so two creatures never
-    // wobble identically. Each ripple also has its own slow `modSpeed`, which
-    // makes its strength wax and wane over time, so the silhouette keeps
-    // morphing through different forms instead of breathing between two shapes.
+    // Membrane harmonics — each ripple's strength waxes/wanes on its own slow
+    // timer so the silhouette keeps morphing through different forms.
     this.membrane = [
       { freq: 3, amp: 0.085, speed: 0.0011, phase: Math.random() * Math.PI * 2, modSpeed: 0.00033, modPhase: Math.random() * Math.PI * 2 },
       { freq: 5, amp: 0.055, speed: 0.0016, phase: Math.random() * Math.PI * 2, modSpeed: 0.00047, modPhase: Math.random() * Math.PI * 2 },
@@ -48,26 +47,51 @@ export class Player {
 
     // Photophores — tiny internal light cells suspended inside the body.
     this.photophores = [];
-    const count = 6;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < 6; i++) {
       this.photophores.push({
         angle: Math.random() * Math.PI * 2,
-        dist: 0.2 + Math.random() * 0.5,   // fraction of radius from centre
-        size: 0.06 + Math.random() * 0.08, // fraction of radius
+        dist: 0.2 + Math.random() * 0.5,
+        size: 0.06 + Math.random() * 0.08,
         phase: Math.random() * Math.PI * 2,
       });
     }
   }
 
-  update(deltaTime) {
-    const t = smoothFactor(this.smoothing, deltaTime);
-    this.x = lerp(this.x, this.targetX, t);
-    this.y = lerp(this.y, this.targetY, t);
+  /**
+   * Advance the physics body. `input` = { thrusting, aimX, aimY } in WORLD
+   * coordinates (main.js converts the cursor via the camera).
+   */
+  update(deltaTime, input) {
+    const dtf = deltaTime / 16.6667;
 
-    this.trailPoints.push({ x: this.x, y: this.y });
-    if (this.trailPoints.length > this.maxTrail) {
-      this.trailPoints.shift();
+    // Buoyant sink — the world's gentle "gravity".
+    this.vy += this.sinkAccel * dtf;
+
+    // TEMPORARY control to feel the physics: hold to thrust toward the aim.
+    // Milestone 6 replaces this with charge-and-release Pulse-Jet.
+    if (input && input.thrusting) {
+      const dx = input.aimX - this.x;
+      const dy = input.aimY - this.y;
+      const len = Math.hypot(dx, dy) || 1;
+      this.vx += (dx / len) * this.thrustAccel * dtf;
+      this.vy += (dy / len) * this.thrustAccel * dtf;
     }
+
+    // Water drag (frame-rate independent), then clamp top speed.
+    const drag = Math.pow(this.drag, dtf);
+    this.vx *= drag;
+    this.vy *= drag;
+    const sp = Math.hypot(this.vx, this.vy);
+    if (sp > this.maxSpeed) {
+      this.vx = (this.vx / sp) * this.maxSpeed;
+      this.vy = (this.vy / sp) * this.maxSpeed;
+    }
+
+    // Integrate position, then record the world-space trail.
+    this.x += this.vx * dtf;
+    this.y += this.vy * dtf;
+    this.trailPoints.push({ x: this.x, y: this.y });
+    if (this.trailPoints.length > this.maxTrail) this.trailPoints.shift();
   }
 
   /** Trace the organic (non-circular) membrane outline as a closed path. */
@@ -77,8 +101,6 @@ export class Player {
       const a = (i / SEG) * Math.PI * 2;
       let rMul = 1;
       for (const m of this.membrane) {
-        // Slowly modulate each ripple's strength so lobes swell and fade,
-        // letting the outline drift through different forms over time.
         const amp = m.amp * (0.55 + 0.45 * Math.sin(now * m.modSpeed + m.modPhase));
         rMul += amp * Math.sin(a * m.freq + now * m.speed + m.phase);
       }
@@ -93,8 +115,6 @@ export class Player {
 
   draw(ctx) {
     const now = Date.now();
-
-    // Breathing pulse (±3px) plus an irregular two-wave shimmer for the glow.
     const pulse = Math.sin(now * 0.003 * this.pulseSpeed) * 3;
     const radius = Math.max(2, this.size + pulse);
     const flicker = 0.82 + 0.18 * (0.6 * Math.sin(now * 0.0021) +
@@ -119,7 +139,7 @@ export class Player {
       ctx.fill();
     }
 
-    // 2. Ambient halo — wide soft glow bleeding into the water, gently flickering.
+    // 2. Ambient halo — wide soft glow, gently flickering.
     const haloR = radius * 4.2;
     const halo = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, haloR);
     halo.addColorStop(0, hexToRgba(this.glowColor, 0.30 * flicker));
@@ -130,8 +150,7 @@ export class Player {
     ctx.arc(this.x, this.y, haloR, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3. Membrane body — organic blob filled with a rich multi-stop gradient
-    //    (translucent gelatinous look, not a flat 2-tone disc).
+    // 3. Membrane body — organic blob with a rich multi-stop gradient.
     ctx.beginPath();
     this._traceBody(ctx, this.x, this.y, radius * 1.04, now);
     const body = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, radius * 1.15);
@@ -143,8 +162,7 @@ export class Player {
     ctx.fillStyle = body;
     ctx.fill();
 
-    // 4. Glowing rim — a bright, blurred membrane edge so the silhouette emits
-    //    light, like a jelly catching the glow.
+    // 4. Glowing rim — bright blurred membrane edge.
     ctx.save();
     ctx.beginPath();
     this._traceBody(ctx, this.x, this.y, radius, now);
@@ -155,8 +173,7 @@ export class Player {
     ctx.stroke();
     ctx.restore();
 
-    // 5. Inner nucleus — a soft secondary glow that drifts off-centre so the
-    //    body never looks perfectly concentric.
+    // 5. Inner nucleus — soft secondary glow drifting off-centre.
     const nx = this.x + Math.sin(now * 0.0006) * radius * 0.18;
     const ny = this.y + Math.cos(now * 0.0008) * radius * 0.15;
     const nucR = radius * 0.55;

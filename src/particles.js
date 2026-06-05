@@ -1,7 +1,8 @@
-// particles.js — the glowing light particles the creature absorbs to grow.
-// Core mechanic: drift, collide, absorb (recycle), sparkle. Uses a fixed,
-// pre-allocated pool so the particle count never grows and the steady state
-// allocates nothing — no garbage-collection stutters.
+// particles.js — the glowing light motes the creature drifts through.
+// Now WORLD-space: motes wrap around the moving camera view (a toroidal field)
+// so they always fill the screen and stream past as you descend. Uses a fixed,
+// pre-allocated pool and pre-rendered glow sprites — no per-frame allocation or
+// shadowBlur.
 
 import { clamp, createGlowSprite } from './utils.js';
 
@@ -9,23 +10,23 @@ import { clamp, createGlowSprite } from './utils.js';
 // deep-sea violet). Each future biome will get its own palette.
 const PALETTE = ['#5de4f5', '#34d399', '#60a5fa', '#a78bfa'];
 const MAX_PARTICLES = 80;
-const EDGE_MARGIN = 40;   // keep spawns away from the very edges
+const WRAP_MARGIN = 80;        // how far past the view edge before wrapping
 const PLAYER_SIZE_CAP = 80;
 
 function rand(min, max) {
   return min + Math.random() * (max - min);
 }
 
-/** A single drifting light mote. Recycled in place on absorption. */
+/** A single drifting light mote in world space. Recycled in place. */
 class Particle {
-  constructor(width, height) {
-    this.reset(width, height);
+  constructor(view) {
+    this.reset(view);
   }
 
-  /** (Re)initialise this particle at a fresh random position + look. */
-  reset(width, height) {
-    this.x = rand(EDGE_MARGIN, width - EDGE_MARGIN);
-    this.y = rand(EDGE_MARGIN, height - EDGE_MARGIN);
+  /** (Re)initialise at a random spot within the given view + a fresh look. */
+  reset(view) {
+    this.x = view.x + Math.random() * view.w;
+    this.y = view.y + Math.random() * view.h;
     this.driftX = rand(-0.3, 0.3);      // px per ~16.67ms frame
     this.driftY = rand(-0.3, 0.3);
     this.pulseOffset = rand(0, Math.PI * 2);
@@ -47,62 +48,59 @@ class Sparkle {
     this.size = rand(1.5, 3);
     this.color = color;
     this.life = 1;          // 1 -> 0
-    this.decay = 1 / 500;   // fully fades over ~0.5s (ms)
+    this.decay = 1 / 500;   // fades over ~0.5s (ms)
   }
 }
 
 export class ParticleSystem {
-  /** @param {HTMLCanvasElement} canvas */
-  constructor(canvas) {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {{x:number,y:number,w:number,h:number}} view  initial world view
+   */
+  constructor(canvas, view) {
     this.canvas = canvas;
     this.particles = [];
     this.sparkles = [];
 
-    // Pre-render one glow sprite per colour once. Stamped with drawImage each
-    // frame instead of per-particle shadowBlur — the key performance win.
+    // Pre-render one glow sprite per colour once (stamped each frame).
     this.sprites = {};
     for (const col of PALETTE) {
       this.sprites[col] = createGlowSprite(col, 64);
     }
 
     // Pre-fill the pool once. Never exceeds MAX_PARTICLES.
-    const { w, h } = this._bounds();
     for (let i = 0; i < MAX_PARTICLES; i++) {
-      this.particles.push(new Particle(w, h));
+      this.particles.push(new Particle(view));
     }
   }
 
-  /** Current logical canvas size (CSS pixels), tracked live on resize. */
-  _bounds() {
-    return {
-      w: this.canvas.clientWidth || window.innerWidth,
-      h: this.canvas.clientHeight || window.innerHeight,
-    };
-  }
-
-  update(deltaTime, player) {
-    const dtf = deltaTime / 16.6667;   // frame-rate normalisation factor
-    const { w, h } = this._bounds();
+  update(deltaTime, player, view) {
+    const dtf = deltaTime / 16.6667;
+    const left = view.x - WRAP_MARGIN;
+    const top = view.y - WRAP_MARGIN;
+    const spanW = view.w + WRAP_MARGIN * 2;
+    const spanH = view.h + WRAP_MARGIN * 2;
 
     for (const p of this.particles) {
-      // Drift, wrapping softly around the screen so motes never pile at edges.
       p.x += p.driftX * dtf;
       p.y += p.driftY * dtf;
-      if (p.x < -EDGE_MARGIN) p.x = w + EDGE_MARGIN;
-      else if (p.x > w + EDGE_MARGIN) p.x = -EDGE_MARGIN;
-      if (p.y < -EDGE_MARGIN) p.y = h + EDGE_MARGIN;
-      else if (p.y > h + EDGE_MARGIN) p.y = -EDGE_MARGIN;
+
+      // Toroidal wrap around the moving view so the field always fills it and
+      // streams past as the camera descends.
+      if (p.x < left) p.x += spanW;
+      else if (p.x > left + spanW) p.x -= spanW;
+      if (p.y < top) p.y += spanH;
+      else if (p.y > top + spanH) p.y -= spanH;
 
       // Collision via squared distance (no sqrt).
       const dx = p.x - player.x;
       const dy = p.y - player.y;
       const reach = player.size + p.size;
       if (dx * dx + dy * dy < reach * reach) {
-        this._absorb(p, player, w, h);
+        this._absorb(p, player, view);
       }
     }
 
-    // Advance sparkles; drop the dead ones.
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
       const s = this.sparkles[i];
       s.x += s.vx * dtf;
@@ -113,12 +111,12 @@ export class ParticleSystem {
   }
 
   /** Absorb a particle: grow the player, throw sparkles, recycle the mote. */
-  _absorb(p, player, w, h) {
+  _absorb(p, player, view) {
     player.size = clamp(player.size + 0.5, 0, PLAYER_SIZE_CAP);
     for (let i = 0; i < 4; i++) {
       this.sparkles.push(new Sparkle(p.x, p.y, p.color));
     }
-    p.reset(w, h);   // recycle in place — no allocation, count stays at 80
+    p.reset(view);   // recycle in place — no allocation, count stays at 80
   }
 
   draw(ctx) {
@@ -126,16 +124,13 @@ export class ParticleSystem {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
-    // Drifting motes — stamp the pre-rendered glow sprite (cheap), scaled by
-    // the mote's size and gentle pulse, tinted by using its colour's sprite.
     for (const p of this.particles) {
       const pulse = 0.85 + 0.15 * Math.sin(now * 0.004 + p.pulseOffset);
-      const glowR = p.size * pulse * 2.6;   // halo radius the sprite fills
+      const glowR = p.size * pulse * 2.6;
       ctx.globalAlpha = p.opacity;
       ctx.drawImage(this.sprites[p.color], p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
     }
 
-    // Sparkle bursts — same sprites, fading over half a second.
     for (const s of this.sparkles) {
       const sprite = this.sprites[s.color] || this.sprites[PALETTE[0]];
       const glowR = s.size * 2.2 * (0.4 + 0.6 * s.life);

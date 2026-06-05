@@ -28,15 +28,20 @@ resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
 // Unified input: one handler for mouse, touch, and pen via Pointer Events.
-// We convert screen coords to canvas-local coords so it stays correct
-// regardless of the canvas's position on the page.
+// We convert the pointer to WORLD coordinates (screen + camera offset) so the
+// creature thrusts toward the right spot as the world scrolls.
+//
+// TEMPORARY scheme for Milestone 5: hold to thrust toward the cursor, release
+// to drift. Milestone 6 replaces this with charge-and-release Pulse-Jet.
 function aimAt(e) {
   const rect = canvas.getBoundingClientRect();
-  game.player.targetX = e.clientX - rect.left;
-  game.player.targetY = e.clientY - rect.top;
+  game.input.aimX = (e.clientX - rect.left) + game.camera.x;
+  game.input.aimY = (e.clientY - rect.top) + game.camera.y;
 }
 window.addEventListener('pointermove', aimAt);
-window.addEventListener('pointerdown', aimAt);
+window.addEventListener('pointerdown', (e) => { aimAt(e); game.input.thrusting = true; });
+window.addEventListener('pointerup', () => { game.input.thrusting = false; });
+window.addEventListener('pointercancel', () => { game.input.thrusting = false; });
 
 game.start();
 
