@@ -44,6 +44,20 @@ export function smoothFactor(smoothing, deltaTime) {
 }
 
 /**
+ * Linearly blend two "#rrggbb" colors and return an "rgb(...)" string.
+ * Used to fade the ocean gradient darker with depth.
+ */
+export function mixHex(a, b, t) {
+  const ah = a.replace('#', ''), bh = b.replace('#', '');
+  const ar = parseInt(ah.substring(0, 2), 16), ag = parseInt(ah.substring(2, 4), 16), ab = parseInt(ah.substring(4, 6), 16);
+  const br = parseInt(bh.substring(0, 2), 16), bg = parseInt(bh.substring(2, 4), 16), bb = parseInt(bh.substring(4, 6), 16);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+/**
  * Pre-render a soft radial glow into an offscreen canvas ONCE, so it can be
  * stamped cheaply with drawImage every frame. This replaces per-frame
  * shadowBlur + createRadialGradient, which are far too slow at scale.

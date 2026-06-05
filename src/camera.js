@@ -12,6 +12,18 @@ export class Camera {
     this.y = 0;
     this.smoothing = 0.09; // how tightly the camera chases the target
     this.verticalBias = 0.4; // target sits 40% down the screen (more visible below)
+    this.shake = 0;       // current shake intensity (px)
+  }
+
+  /** Kick the camera into a shake (keeps the strongest pending intensity). */
+  triggerShake(intensity) {
+    if (intensity > this.shake) this.shake = intensity;
+  }
+
+  /** Decay the shake over time (frame-rate independent). */
+  updateShake(deltaTime) {
+    this.shake *= Math.pow(0.85, deltaTime / 16.6667);
+    if (this.shake < 0.1) this.shake = 0;
   }
 
   /** Where the view's top-left should be to frame the target. */
@@ -37,8 +49,13 @@ export class Camera {
     this.y = lerp(this.y, d.y, t);
   }
 
-  /** Shift the context into world space. Call inside a save()/restore(). */
+  /** Shift the context into world space (plus any active shake). */
   apply(ctx) {
-    ctx.translate(-this.x, -this.y);
+    let ox = 0, oy = 0;
+    if (this.shake > 0.1) {
+      ox = (Math.random() * 2 - 1) * this.shake;
+      oy = (Math.random() * 2 - 1) * this.shake;
+    }
+    ctx.translate(-this.x + ox, -this.y + oy);
   }
 }

@@ -7,6 +7,7 @@ import { Player } from './player.js';
 import { ParticleSystem } from './particles.js';
 import { Camera } from './camera.js';
 import { createOceanLevel } from './level.js';
+import { World } from './world.js';
 
 export class Game {
   /**
@@ -27,6 +28,9 @@ export class Game {
 
     // The player creature (a physics body).
     this.player = new Player(canvas, ctx);
+
+    // The atmosphere backdrop.
+    this.world = new World();
 
     // The level geometry; place the creature at its spawn point.
     this.level = createOceanLevel();
@@ -114,17 +118,18 @@ export class Game {
    */
   update(deltaTime) {
     this.player.update(deltaTime, this.input);
-    this.level.collide(this.player);
+    const impact = this.level.collide(this.player);
+    if (impact > 6) this.camera.triggerShake(Math.min(9, impact * 0.6));
+    this.camera.updateShake(deltaTime);
     this.camera.follow(this.player.x, this.player.y, this.width, this.height, deltaTime);
     this.particles.update(deltaTime, this.player, this._view());
     // ui updates arrive in later milestones.
   }
 
-  /** Render: clear the ocean (screen-space), then draw the world via camera. */
+  /** Render: atmosphere backdrop → world (via camera) → vignette → HUD. */
   draw() {
     const { ctx } = this;
-    ctx.fillStyle = '#050a14';
-    ctx.fillRect(0, 0, this.width, this.height);
+    this.world.drawBackground(ctx, this.camera, this.width, this.height);
 
     ctx.save();
     this.camera.apply(ctx);
@@ -133,6 +138,7 @@ export class Game {
     this.player.draw(ctx);             // creature on top
     ctx.restore();
 
+    this.world.drawOverlay(ctx, this.width, this.height);
     this._drawFps(ctx);   // HUD stays screen-fixed
   }
 

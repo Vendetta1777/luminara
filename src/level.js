@@ -24,6 +24,7 @@ export class Level {
   constructor(spawn, solids) {
     this.spawn = spawn;
     this.solids = solids;
+    this.restitution = 0.35;   // bounciness on impact (0 = dead stop, 1 = full)
   }
 
   /**
@@ -32,6 +33,7 @@ export class Level {
    */
   collide(player) {
     const r = player.size;
+    let maxImpact = 0;
     for (const s of this.solids) {
       // Closest point on the rectangle to the creature's centre.
       const cx = clamp(player.x, s.left, s.right);
@@ -62,14 +64,15 @@ export class Level {
       player.x += nx * (r - dist);
       player.y += ny * (r - dist);
 
-      // Remove velocity into the surface (slide); small bounce for softness.
+      // Remove velocity into the surface, then bounce back by `restitution`.
       const vn = player.vx * nx + player.vy * ny;
       if (vn < 0) {
-        const restitution = 0.08;
-        player.vx -= (1 + restitution) * vn * nx;
-        player.vy -= (1 + restitution) * vn * ny;
+        if (-vn > maxImpact) maxImpact = -vn;
+        player.vx -= (1 + this.restitution) * vn * nx;
+        player.vy -= (1 + this.restitution) * vn * ny;
       }
     }
+    return maxImpact;   // largest into-surface speed this frame (drives shake)
   }
 
   /** Draw every solid that intersects the view. */
