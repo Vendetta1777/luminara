@@ -32,6 +32,7 @@ export class Level {
 
     this.hazards = [];         // {x, y, r, phase} — knock you back + drain light
     this.checkpoints = [];     // {x, y, r, active, phase} — respawn anemones
+    this.currents = [];        // {x, y, w, h, fx, fy} — flow zones that push you
     this.gate = null;          // {x, y, r, charge, required, open}
     this.respawn = { ...spawn };
   }
@@ -44,6 +45,15 @@ export class Level {
     const dtf = deltaTime / 16.6667;
     let hazardHit = false;
     let gateOpened = false;
+
+    // Currents push the creature while it's inside a flow zone.
+    for (const c of this.currents) {
+      if (player.x > c.x && player.x < c.x + c.w &&
+          player.y > c.y && player.y < c.y + c.h) {
+        player.vx += c.fx * dtf;
+        player.vy += c.fy * dtf;
+      }
+    }
 
     // Hazards — knock the creature away and drain light, unless invulnerable
     // (a dash's i-frames punch straight through).
@@ -134,6 +144,10 @@ export class Level {
     const now = Date.now();
     const vr = view.x + view.w;
     const vb = view.y + view.h;
+    for (const c of this.currents) {
+      if (c.x + c.w < view.x || c.x > vr || c.y + c.h < view.y || c.y > vb) continue;
+      this._drawCurrent(ctx, c, now);
+    }
     for (const s of this.solids) {
       if (s.right < view.x || s.left > vr || s.bottom < view.y || s.top > vb) continue;
       this._drawSolid(ctx, s, now);
@@ -152,6 +166,40 @@ export class Level {
     if (this.gate && near(this.gate.x, this.gate.y, this.gate.r + 40)) {
       this._drawGate(ctx, this.gate, now);
     }
+  }
+
+  /** A flow zone — faint streaks drifting in the current's direction. */
+  _drawCurrent(ctx, c, now) {
+    const dir = Math.atan2(c.fy, c.fx);
+    const cos = Math.cos(dir), sin = Math.sin(dir);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = hexToRgba('#7fdcff', 1);
+    ctx.lineWidth = 1.4;
+    const N = 16;
+    for (let i = 0; i < N; i++) {
+      const seed = (i * 0.61803398) % 1;
+      const across = seed;
+      let along = ((now * 0.0009) + seed) % 1;
+      let px, py;
+      if (Math.abs(cos) >= Math.abs(sin)) {
+        if (cos < 0) along = 1 - along;
+        px = c.x + along * c.w;
+        py = c.y + across * c.h;
+      } else {
+        if (sin < 0) along = 1 - along;
+        px = c.x + across * c.w;
+        py = c.y + along * c.h;
+      }
+      const phase = ((now * 0.0009) + seed) % 1;
+      ctx.globalAlpha = (1 - Math.abs(phase - 0.5) * 2) * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + cos * 16, py + sin * 16);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   /** A spiky urchin hazard in a danger hue so it reads as "don't touch". */
@@ -334,37 +382,66 @@ export class Level {
   }
 }
 
-/** The Ocean level — a descending shaft with staggered coral ledges. */
+/**
+ * The Ocean level — OPEN water, not a corridor. Boundary walls are far out
+ * (mostly off-screen) so it feels vast; you weave around floating coral
+ * islands, ceiling stalactites, and floor pillars, dodging urchins and
+ * currents on the way down to the light-gate.
+ */
 export function createOceanLevel() {
   const spawn = { x: 0, y: 0 };
   const solids = [
-    rect(-460, -320, 920, 60),    // ceiling
-    rect(-460, -320, 60, 3500),   // left wall
-    rect(400, -320, 60, 3500),    // right wall
-    rect(-220, 420, 200, 36, true),
-    rect(120, 720, 220, 36, true),
-    rect(-340, 1020, 190, 36, true),
-    rect(-60, 1320, 200, 36, true),
-    rect(180, 1640, 200, 36, true),
-    rect(-300, 1960, 190, 36, true),
-    rect(60, 2280, 200, 36, true),
-    rect(-220, 2600, 200, 36, true),
-    rect(-460, 2980, 920, 220),   // abyss floor
+    // Far boundary — keeps you in the area without feeling boxed in.
+    rect(-760, -360, 1520, 60),   // ceiling
+    rect(-760, -360, 60, 3620),   // left wall (far off-screen)
+    rect(700, -360, 60, 3620),    // right wall (far off-screen)
+    rect(-760, 3000, 1520, 260),  // abyss floor
+
+    // Ceiling stalactites + floor pillars — obstacles in the open.
+    rect(-280, -300, 46, 360),
+    rect(260, -300, 46, 300),
+    rect(-40, -300, 46, 240),
+    rect(-260, 2660, 46, 340),
+    rect(240, 2660, 46, 340),
+
+    // Floating coral islands — weave around these.
+    rect(-540, 360, 240, 48, true),
+    rect(220, 520, 280, 48, true),
+    rect(-160, 760, 220, 44, true),
+    rect(-640, 1000, 200, 44, true),
+    rect(380, 1080, 260, 48, true),
+    rect(-280, 1300, 240, 46, true),
+    rect(120, 1540, 220, 46, true),
+    rect(-520, 1700, 200, 44, true),
+    rect(440, 1820, 220, 46, true),
+    rect(-180, 2040, 260, 48, true),
+    rect(260, 2280, 240, 46, true),
+    rect(-480, 2380, 200, 44, true),
+    rect(-60, 2560, 240, 46, true),
+    rect(320, 2720, 200, 44, true),
   ];
   // No anchors in the Ocean — the Tendril Tether is the Forest's signature
   // ability. The engine support (Level anchors, player tether) stays dormant.
   const level = new Level(spawn, solids);
 
   level.hazards = [
-    { x: 130, y: 560 }, { x: -160, y: 1180 },
-    { x: 190, y: 1820 }, { x: -120, y: 2460 },
+    { x: -400, y: 560 }, { x: 80, y: 700 }, { x: 500, y: 860 },
+    { x: -380, y: 1180 }, { x: 260, y: 1400 }, { x: -140, y: 1640 },
+    { x: 400, y: 2000 }, { x: -320, y: 2180 }, { x: 60, y: 2440 },
+    { x: 440, y: 2560 },
   ].map((h) => ({ ...h, r: 27, phase: Math.random() * TAU }));
 
+  level.currents = [
+    { x: -260, y: 980, w: 520, h: 200, fx: 0.08, fy: 0 },    // pushes right
+    { x: -100, y: 1880, w: 640, h: 220, fx: -0.09, fy: 0 },  // pushes left
+    { x: -360, y: 2300, w: 560, h: 200, fx: 0, fy: 0.08 },   // pushes down
+  ];
+
   level.checkpoints = [
-    { x: 0, y: 300 }, { x: 0, y: 1500 }, { x: 0, y: 2760 },
+    { x: 0, y: 200 }, { x: -280, y: 1280 }, { x: -60, y: 2520 },
   ].map((c) => ({ ...c, r: 16, active: false, phase: Math.random() * TAU }));
 
-  level.gate = { x: 0, y: 2870, r: 70, charge: 0, required: 60, open: false };
+  level.gate = { x: 0, y: 2890, r: 72, charge: 0, required: 80, open: false };
   level.respawn = { ...spawn };
   return level;
 }
