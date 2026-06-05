@@ -6,6 +6,8 @@
 
 import { clamp, hexToRgba } from './utils.js';
 
+const TAU = Math.PI * 2;
+
 /** Build a solid rectangle, precomputing its edges. */
 function rect(x, y, w, h, ledge = false) {
   return { x, y, w, h, left: x, top: y, right: x + w, bottom: y + h, ledge };
@@ -21,10 +23,12 @@ export class Level {
    * @param {{x:number,y:number}} spawn  where the creature starts
    * @param {Array} solids  collidable rectangles
    */
-  constructor(spawn, solids) {
+  constructor(spawn, solids, anchors = []) {
     this.spawn = spawn;
     this.solids = solids;
+    this.anchors = anchors;    // grapple points {x, y, phase}
     this.restitution = 0.35;   // bounciness on impact (0 = dead stop, 1 = full)
+    this.tetherRange = 340;    // how far the tendril can reach
   }
 
   /**
@@ -75,8 +79,8 @@ export class Level {
     return maxImpact;   // largest into-surface speed this frame (drives shake)
   }
 
-  /** Draw every solid that intersects the view. */
-  draw(ctx, view) {
+  /** Draw every solid + anchor that intersects the view. */
+  draw(ctx, view, player) {
     const now = Date.now();
     const vr = view.x + view.w;
     const vb = view.y + view.h;
@@ -84,6 +88,48 @@ export class Level {
       if (s.right < view.x || s.left > vr || s.bottom < view.y || s.top > vb) continue;
       this._drawSolid(ctx, s, now);
     }
+    for (const a of this.anchors) {
+      if (a.x < view.x - 40 || a.x > vr + 40 || a.y < view.y - 40 || a.y > vb + 40) continue;
+      this._drawAnchor(ctx, a, now, player);
+    }
+  }
+
+  /** A glowing grapple knob; brighter when reachable, brightest when grabbed. */
+  _drawAnchor(ctx, a, now, player) {
+    const pulse = 0.6 + 0.4 * Math.sin(now * 0.004 + a.phase);
+    const inRange = player &&
+      Math.hypot(a.x - player.x, a.y - player.y) <= this.tetherRange;
+    const tethered = player && player.tetherAnchor === a;
+    const glowA = tethered ? 1 : inRange ? 0.8 : 0.4;
+    const gr = 6 * (tethered ? 2.4 : inRange ? 1.9 : 1.4) * (0.9 + 0.2 * pulse);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, gr);
+    g.addColorStop(0, hexToRgba('#ffffff', 0.9 * glowA));
+    g.addColorStop(0.4, hexToRgba('#5de4f5', 0.6 * glowA));
+    g.addColorStop(1, hexToRgba('#5de4f5', 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, gr, 0, TAU);
+    ctx.fill();
+
+    // A crisp ring marks it as a grabbable structure (motes have no rings).
+    ctx.strokeStyle = hexToRgba('#aef0ff', tethered ? 0.95 : inRange ? 0.75 : 0.4);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 9, 0, TAU);
+    ctx.stroke();
+
+    // In range: an extra pulsing outer ring as a "you can grab this" cue.
+    if (inRange && !tethered) {
+      ctx.strokeStyle = hexToRgba('#5de4f5', 0.5 * pulse);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 15 + pulse * 3, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _drawSolid(ctx, s, now) {
@@ -157,5 +203,10 @@ export function createOceanLevel() {
     rect(-220, 2600, 200, 36, true),
     rect(-460, 2980, 920, 220),   // abyss floor
   ];
-  return new Level(spawn, solids);
+  const anchors = [
+    { x: 0, y: 250 }, { x: -250, y: 600 }, { x: 240, y: 900 },
+    { x: -120, y: 1180 }, { x: 200, y: 1480 }, { x: -240, y: 1800 },
+    { x: 120, y: 2120 }, { x: -160, y: 2440 }, { x: 80, y: 2760 },
+  ].map((a) => ({ ...a, phase: Math.random() * TAU }));
+  return new Level(spawn, solids, anchors);
 }

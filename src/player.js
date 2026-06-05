@@ -47,6 +47,10 @@ export class Player {
     this.invuln = 0;           // i-frame timer (ms) during a dash
     this.flareTime = 0;        // 1 -> 0 flare animation
 
+    // --- Tendril Tether: swing from an anchor ---
+    this.tetherAnchor = null;  // {x, y} while grappling, else null
+    this.ropeLength = 0;       // taut length captured at attach
+
     this.size = 20;
     this.color = '#5de4f5';
     this.glowColor = '#5de4f5';
@@ -110,9 +114,26 @@ export class Player {
       this.vy = (this.vy / sp) * cap;
     }
 
-    // Integrate position, then record the world-space trail.
+    // Integrate position.
     this.x += this.vx * dtf;
     this.y += this.vy * dtf;
+
+    // Tether constraint: the rope is a max length. When taut, snap back to it
+    // and remove the outward (radial) velocity so you swing like a pendulum.
+    if (this.tetherAnchor) {
+      const dx = this.x - this.tetherAnchor.x;
+      const dy = this.y - this.tetherAnchor.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      if (dist > this.ropeLength) {
+        const nx = dx / dist, ny = dy / dist;
+        this.x = this.tetherAnchor.x + nx * this.ropeLength;
+        this.y = this.tetherAnchor.y + ny * this.ropeLength;
+        const vradial = this.vx * nx + this.vy * ny;
+        if (vradial > 0) { this.vx -= vradial * nx; this.vy -= vradial * ny; }
+      }
+    }
+
+    // Record the world-space trail.
     this.trailPoints.push({ x: this.x, y: this.y });
     if (this.trailPoints.length > this.maxTrail) this.trailPoints.shift();
 
@@ -150,6 +171,17 @@ export class Player {
     this.light -= this.flareCost;
     this.flareTime = 1;
     return true;
+  }
+
+  /** Grab an anchor; the current distance becomes the taut rope length. */
+  attachTether(anchor) {
+    this.tetherAnchor = anchor;
+    this.ropeLength = Math.hypot(this.x - anchor.x, this.y - anchor.y);
+  }
+
+  /** Let go — tangential velocity carries you off (slingshot). */
+  releaseTether() {
+    this.tetherAnchor = null;
   }
 
   /**
@@ -230,6 +262,24 @@ export class Player {
     ctx.beginPath();
     ctx.arc(this.x, this.y, haloR, 0, Math.PI * 2);
     ctx.fill();
+
+    // Tether rope — a glowing bioluminescent thread to the anchor.
+    if (this.tetherAnchor) {
+      const ax = this.tetherAnchor.x, ay = this.tetherAnchor.y;
+      const grad = ctx.createLinearGradient(this.x, this.y, ax, ay);
+      grad.addColorStop(0, hexToRgba(this.accentColor, 0.85));
+      grad.addColorStop(1, hexToRgba('#5de4f5', 0.5));
+      ctx.save();
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#5de4f5';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // --- Body group: squash & stretch along velocity (dash streak) plus a
     //     charge tension jitter. Wraps the membrane, rim, nucleus, photophores.

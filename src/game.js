@@ -67,6 +67,23 @@ export class Game {
     return { x: this.camera.x, y: this.camera.y, w: this.width, h: this.height };
   }
 
+  /** Grapple the in-range anchor nearest the cursor. Ignored if already tethered. */
+  tetherPress() {
+    if (this.player.tetherAnchor) return;
+    const range = this.level.tetherRange;
+    let best = null, bestD = Infinity;
+    for (const a of this.level.anchors) {
+      if (Math.hypot(a.x - this.player.x, a.y - this.player.y) > range) continue;
+      const ad = Math.hypot(a.x - this.input.aimX, a.y - this.input.aimY);
+      if (ad < bestD) { bestD = ad; best = a; }
+    }
+    if (best) this.player.attachTether(best);
+  }
+
+  tetherRelease() {
+    this.player.releaseTether();
+  }
+
   /** Begin the loop. */
   start() {
     if (this.running) return;
@@ -134,7 +151,7 @@ export class Game {
     ctx.save();
     this.camera.apply(ctx);
     this.particles.draw(ctx);          // ambient motes (behind the rock)
-    this.level.draw(ctx, this._view()); // coral geometry
+    this.level.draw(ctx, this._view(), this.player); // coral geometry + anchors
     this.player.draw(ctx);             // creature on top
     ctx.restore();
 
