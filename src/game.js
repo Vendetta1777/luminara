@@ -4,6 +4,7 @@
 
 import { clamp } from './utils.js';
 import { Player } from './player.js';
+import { ParticleSystem } from './particles.js';
 
 export class Game {
   /**
@@ -16,6 +17,9 @@ export class Game {
 
     // The player creature. Input (main.js) steers it via player.targetX/Y.
     this.player = new Player(canvas, ctx);
+
+    // The field of absorbable light particles.
+    this.particles = new ParticleSystem(canvas);
 
     // Logical size in CSS pixels (what all game systems work in). The canvas
     // backing buffer may be larger on high-DPI screens; main.js keeps these
@@ -81,15 +85,17 @@ export class Game {
    */
   update(deltaTime) {
     this.player.update(deltaTime);
-    // world / particles / ui updates arrive in later milestones.
+    this.particles.update(deltaTime, this.player);
+    // world / ui updates arrive in later milestones.
   }
 
-  /** Render one frame: clear to the deep ocean, then draw the player on top. */
+  /** Render: clear the ocean, draw particles, then the creature on top. */
   draw() {
     const { ctx } = this;
     ctx.fillStyle = '#050a14';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    this.particles.draw(ctx);
     this.player.draw(ctx);
   }
 }
