@@ -42,3 +42,24 @@ export function hexToRgba(hex, alpha = 1) {
 export function smoothFactor(smoothing, deltaTime) {
   return 1 - Math.pow(1 - smoothing, deltaTime / 16.6667);
 }
+
+/**
+ * Pre-render a soft radial glow into an offscreen canvas ONCE, so it can be
+ * stamped cheaply with drawImage every frame. This replaces per-frame
+ * shadowBlur + createRadialGradient, which are far too slow at scale.
+ * Returns a canvas: a white-hot core fading through `color` to transparent.
+ */
+export function createGlowSprite(color, diameter = 64) {
+  const c = document.createElement('canvas');
+  c.width = diameter;
+  c.height = diameter;
+  const g = c.getContext('2d');
+  const r = diameter / 2;
+  const grad = g.createRadialGradient(r, r, 0, r, r, r);
+  grad.addColorStop(0.0, hexToRgba('#ffffff', 1));
+  grad.addColorStop(0.3, hexToRgba(color, 0.85));
+  grad.addColorStop(1.0, hexToRgba(color, 0));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, diameter, diameter);
+  return c;
+}

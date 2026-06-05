@@ -3,7 +3,7 @@
 // pre-allocated pool so the particle count never grows and the steady state
 // allocates nothing — no garbage-collection stutters.
 
-import { clamp, hexToRgba } from './utils.js';
+import { clamp, createGlowSprite } from './utils.js';
 
 // Ocean palette — cohesive cool "underwater" tones (cyan, teal, soft blue,
 // deep-sea violet). In Milestone 5 this moves into the Ocean biome definition.
@@ -70,6 +70,13 @@ export class ParticleSystem {
     this.particles = [];
     this.sparkles = [];
 
+    // Pre-render one glow sprite per colour once. Stamped with drawImage each
+    // frame instead of per-particle shadowBlur — the key performance win.
+    this.sprites = {};
+    for (const col of [...PALETTE, SPECIAL_COLOR]) {
+      this.sprites[col] = createGlowSprite(col, 64);
+    }
+
     // Pre-fill the pool once. Never exceeds MAX_PARTICLES.
     const { w, h } = this._bounds();
     for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -133,36 +140,24 @@ export class ParticleSystem {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
-    // Drifting motes — soft glowing orbs with a gentle individual pulse.
+    // Drifting motes — stamp the pre-rendered glow sprite (cheap), scaled by
+    // the mote's size and gentle pulse, tinted by using its colour's sprite.
     for (const p of this.particles) {
       const pulse = 0.85 + 0.15 * Math.sin(now * 0.004 + p.pulseOffset);
-      const r = p.size * pulse;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = p.special ? 22 : 14;   // special motes bloom brighter
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-      g.addColorStop(0, hexToRgba('#ffffff', p.opacity));
-      g.addColorStop(0.4, hexToRgba(p.color, p.opacity));
-      g.addColorStop(1, hexToRgba(p.color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
+      const glowR = p.size * pulse * 2.6;   // halo radius the sprite fills
+      ctx.globalAlpha = p.opacity;
+      ctx.drawImage(this.sprites[p.color], p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
     }
 
-    // Sparkle bursts — tiny bright flecks fading over half a second.
-    ctx.shadowBlur = 0;
+    // Sparkle bursts — same sprites, fading over half a second.
     for (const s of this.sparkles) {
-      const r = s.size * s.life;
-      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, Math.max(0.5, r * 2));
-      g.addColorStop(0, hexToRgba('#ffffff', s.life));
-      g.addColorStop(0.5, hexToRgba(s.color, s.life * 0.8));
-      g.addColorStop(1, hexToRgba(s.color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, Math.max(0.5, r * 2), 0, Math.PI * 2);
-      ctx.fill();
+      const sprite = this.sprites[s.color] || this.sprites[PALETTE[0]];
+      const glowR = s.size * 2.2 * (0.4 + 0.6 * s.life);
+      ctx.globalAlpha = s.life;
+      ctx.drawImage(sprite, s.x - glowR, s.y - glowR, glowR * 2, glowR * 2);
     }
 
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }

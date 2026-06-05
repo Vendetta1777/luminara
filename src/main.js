@@ -14,7 +14,9 @@ const ctx = canvas.getContext('2d');
  * code can keep working in plain CSS pixels.
  */
 function resizeCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  // Cap at 2: beyond that the extra pixels cost a lot of fill rate for almost
+  // no visible gain on these soft glows.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

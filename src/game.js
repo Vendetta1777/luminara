@@ -2,7 +2,7 @@
 // Owns the requestAnimationFrame loop and (later) orchestrates every system
 // (world, particles, player, ui) in the correct draw order each frame.
 
-import { clamp } from './utils.js';
+import { clamp, lerp } from './utils.js';
 import { Player } from './player.js';
 import { ParticleSystem } from './particles.js';
 
@@ -30,6 +30,7 @@ export class Game {
     this.running = false;
     this.lastTime = 0;     // timestamp of the previous frame (ms)
     this.frameCount = 0;   // total frames since start, for periodic logging
+    this.fps = 0;          // smoothed, honest frame rate for the on-screen counter
     this._loop = this._loop.bind(this); // stable reference for rAF
   }
 
@@ -62,11 +63,16 @@ export class Game {
   _loop(now) {
     if (!this.running) return;
 
-    // Milliseconds since the previous frame. Capped so a backgrounded tab
-    // returning to focus can't produce a huge jump (refined in Milestone 9).
-    const deltaTime = clamp(now - this.lastTime, 0, 50);
+    // Raw interval drives the honest FPS readout; the clamped one drives motion
+    // (so a backgrounded tab returning to focus can't produce a huge jump).
+    const raw = now - this.lastTime;
+    const deltaTime = clamp(raw, 0, 50);
     this.lastTime = now;
     this.frameCount++;
+    if (raw > 0) {
+      const inst = 1000 / raw;
+      this.fps = this.fps ? lerp(this.fps, inst, 0.1) : inst;
+    }
 
     this.update(deltaTime);
     this.draw();
@@ -97,5 +103,18 @@ export class Game {
 
     this.particles.draw(ctx);
     this.player.draw(ctx);
+
+    this._drawFps(ctx);
+  }
+
+  /** Tiny, unobtrusive FPS readout, top-left. */
+  _drawFps(ctx) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '12px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${Math.round(this.fps)} fps`, 10, 10);
+    ctx.restore();
   }
 }
