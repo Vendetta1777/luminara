@@ -29,6 +29,56 @@ export class Level {
     this.anchors = anchors;    // grapple points {x, y, phase}
     this.restitution = 0.35;   // bounciness on impact (0 = dead stop, 1 = full)
     this.tetherRange = 340;    // how far the tendril can reach
+
+    this.hazards = [];         // {x, y, r, phase} — knock you back + drain light
+    this.checkpoints = [];     // {x, y, r, active, phase} — respawn anemones
+    this.gate = null;          // {x, y, r, charge, required, open}
+    this.respawn = { ...spawn };
+  }
+
+  /**
+   * Per-frame interactions (hazards, checkpoints, gate). Returns events for the
+   * game to react to (shake, transition). Forgiving: hazards never kill.
+   */
+  interact(player, deltaTime) {
+    const dtf = deltaTime / 16.6667;
+    let hazardHit = false;
+    let gateOpened = false;
+
+    // Hazards — knock the creature away and drain light, unless invulnerable
+    // (a dash's i-frames punch straight through).
+    for (const hz of this.hazards) {
+      const dx = player.x - hz.x, dy = player.y - hz.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < player.size + hz.r && player.invuln <= 0) {
+        player.vx = (dx / d) * 13;
+        player.vy = (dy / d) * 13;
+        player.light = Math.max(0, player.light - 12);
+        player.invuln = 260;   // brief mercy window so you're not re-hit
+        hazardHit = true;
+      }
+    }
+
+    // Checkpoints — light up the anemone on touch; it becomes the respawn.
+    for (const cp of this.checkpoints) {
+      if (!cp.active && Math.hypot(player.x - cp.x, player.y - cp.y) < player.size + cp.r) {
+        cp.active = true;
+        this.respawn = { x: cp.x, y: cp.y - 40 };
+      }
+    }
+
+    // Light-gate — pour your light into it when close; opens when charged.
+    const gate = this.gate;
+    if (gate && !gate.open) {
+      const d = Math.hypot(player.x - gate.x, player.y - gate.y);
+      if (d < gate.r + 70) {
+        const give = Math.min(player.light, 1.4 * dtf, gate.required - gate.charge);
+        if (give > 0) { player.light -= give; gate.charge += give; }
+        if (gate.charge >= gate.required) { gate.open = true; gateOpened = true; }
+      }
+    }
+
+    return { hazardHit, gateOpened };
   }
 
   /**
@@ -92,6 +142,104 @@ export class Level {
       if (a.x < view.x - 40 || a.x > vr + 40 || a.y < view.y - 40 || a.y > vb + 40) continue;
       this._drawAnchor(ctx, a, now, player);
     }
+    const near = (x, y, pad) => x > view.x - pad && x < vr + pad && y > view.y - pad && y < vb + pad;
+    for (const hz of this.hazards) {
+      if (near(hz.x, hz.y, hz.r + 20)) this._drawHazard(ctx, hz, now);
+    }
+    for (const cp of this.checkpoints) {
+      if (near(cp.x, cp.y, cp.r + 40)) this._drawCheckpoint(ctx, cp, now);
+    }
+    if (this.gate && near(this.gate.x, this.gate.y, this.gate.r + 40)) {
+      this._drawGate(ctx, this.gate, now);
+    }
+  }
+
+  /** A spiky urchin hazard in a danger hue so it reads as "don't touch". */
+  _drawHazard(ctx, hz, now) {
+    ctx.save();
+    ctx.fillStyle = '#1c0b12';        // dark body
+    ctx.beginPath();
+    ctx.arc(hz.x, hz.y, hz.r * 0.45, 0, TAU);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = hexToRgba('#ff5d73', 0.7);
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff5d73';
+    ctx.shadowBlur = 8;
+    const spikes = 12;
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * TAU + now * 0.0006;
+      const inner = hz.r * 0.4;
+      const outer = hz.r * (1 + 0.12 * Math.sin(now * 0.005 + i));
+      ctx.beginPath();
+      ctx.moveTo(hz.x + Math.cos(a) * inner, hz.y + Math.sin(a) * inner);
+      ctx.lineTo(hz.x + Math.cos(a) * outer, hz.y + Math.sin(a) * outer);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** A sea anemone checkpoint — dim until reached, bright green once active. */
+  _drawCheckpoint(ctx, cp, now) {
+    const col = cp.active ? '#6ee7b7' : '#3a6a7a';
+    const bright = cp.active ? 1 : 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, cp.r * 1.8);
+    g.addColorStop(0, hexToRgba('#ffffff', 0.5 * bright));
+    g.addColorStop(0.4, hexToRgba(col, 0.45 * bright));
+    g.addColorStop(1, hexToRgba(col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, cp.r * 1.8, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba(col, 0.6 * bright);
+    ctx.lineWidth = 2;
+    const fronds = 6;
+    for (let i = 0; i < fronds; i++) {
+      const a = (i / fronds) * TAU;
+      const sway = Math.sin(now * 0.003 + i + cp.phase) * 6;
+      ctx.beginPath();
+      ctx.moveTo(cp.x, cp.y);
+      ctx.quadraticCurveTo(
+        cp.x + Math.cos(a) * cp.r, cp.y - cp.r * 0.5,
+        cp.x + Math.cos(a) * cp.r * 0.4 + sway, cp.y - cp.r * 1.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** The light-gate — a dim ring that fills with a charge arc, then opens. */
+  _drawGate(ctx, gate, now) {
+    const frac = clamp(gate.charge / gate.required, 0, 1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    if (gate.open) { ctx.shadowColor = '#5de4f5'; ctx.shadowBlur = 22; }
+
+    ctx.strokeStyle = hexToRgba('#5de4f5', gate.open ? 0.9 : 0.3);
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(gate.x, gate.y, gate.r, 0, TAU);
+    ctx.stroke();
+
+    if (!gate.open && frac > 0) {
+      ctx.strokeStyle = hexToRgba('#aef0ff', 0.9);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(gate.x, gate.y, gate.r, -Math.PI / 2, -Math.PI / 2 + frac * TAU);
+      ctx.stroke();
+    }
+
+    const a = gate.open ? 0.5 : 0.12 + 0.25 * frac;
+    const g = ctx.createRadialGradient(gate.x, gate.y, 0, gate.x, gate.y, gate.r);
+    g.addColorStop(0, hexToRgba('#ffffff', a));
+    g.addColorStop(0.5, hexToRgba('#5de4f5', a * 0.6));
+    g.addColorStop(1, hexToRgba('#5de4f5', 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(gate.x, gate.y, gate.r, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 
   /** A glowing grapple knob; brighter when reachable, brightest when grabbed. */
@@ -205,5 +353,18 @@ export function createOceanLevel() {
   ];
   // No anchors in the Ocean — the Tendril Tether is the Forest's signature
   // ability. The engine support (Level anchors, player tether) stays dormant.
-  return new Level(spawn, solids);
+  const level = new Level(spawn, solids);
+
+  level.hazards = [
+    { x: 130, y: 560 }, { x: -160, y: 1180 },
+    { x: 190, y: 1820 }, { x: -120, y: 2460 },
+  ].map((h) => ({ ...h, r: 27, phase: Math.random() * TAU }));
+
+  level.checkpoints = [
+    { x: 0, y: 300 }, { x: 0, y: 1500 }, { x: 0, y: 2760 },
+  ].map((c) => ({ ...c, r: 16, active: false, phase: Math.random() * TAU }));
+
+  level.gate = { x: 0, y: 2870, r: 70, charge: 0, required: 60, open: false };
+  level.respawn = { ...spawn };
+  return level;
 }

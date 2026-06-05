@@ -184,6 +184,17 @@ export class Player {
     this.tetherAnchor = null;
   }
 
+  /** Teleport to a respawn point, fully at rest. */
+  respawnAt(x, y) {
+    this.x = x;
+    this.y = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.charging = false;
+    this.charge = 0;
+    this.tetherAnchor = null;
+  }
+
   /**
    * Slingshot release: fling AWAY from the aim (you pull the band toward the
    * cursor, so you launch the opposite way), scaled by the current charge.

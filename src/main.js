@@ -59,6 +59,8 @@ window.addEventListener('keydown', (e) => {
     game.player.burstDash(game.input.aimX, game.input.aimY);
   } else if (e.key === 'f' || e.key === 'F') {
     game.player.flare();
+  } else if (e.key === 'r' || e.key === 'R') {
+    game.respawn();   // back to the last checkpoint
   }
 });
 

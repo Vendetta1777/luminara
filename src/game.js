@@ -84,6 +84,12 @@ export class Game {
     this.player.releaseTether();
   }
 
+  /** Respawn the creature at the last activated checkpoint. */
+  respawn() {
+    const r = this.level.respawn;
+    this.player.respawnAt(r.x, r.y);
+  }
+
   /** Begin the loop. */
   start() {
     if (this.running) return;
@@ -137,6 +143,11 @@ export class Game {
     this.player.update(deltaTime, this.input);
     const impact = this.level.collide(this.player);
     if (impact > 6) this.camera.triggerShake(Math.min(9, impact * 0.6));
+
+    const ev = this.level.interact(this.player, deltaTime);
+    if (ev.hazardHit) this.camera.triggerShake(7);
+    if (ev.gateOpened) console.log('Light-gate opened — the path to the next world awaits.');
+
     this.camera.updateShake(deltaTime);
     this.camera.follow(this.player.x, this.player.y, this.width, this.height, deltaTime);
     this.particles.update(deltaTime, this.player, this._view());
