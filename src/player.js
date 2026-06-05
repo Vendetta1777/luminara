@@ -36,11 +36,14 @@ export class Player {
     this.trailPoints = [];
 
     // Per-creature membrane harmonics — random phases so two creatures never
-    // wobble identically. Three layered sines give an organic, non-circular edge.
+    // wobble identically. Each ripple also has its own slow `modSpeed`, which
+    // makes its strength wax and wane over time, so the silhouette keeps
+    // morphing through different forms instead of breathing between two shapes.
     this.membrane = [
-      { freq: 3, amp: 0.07, speed: 0.0011, phase: Math.random() * Math.PI * 2 },
-      { freq: 5, amp: 0.045, speed: 0.0016, phase: Math.random() * Math.PI * 2 },
-      { freq: 2, amp: 0.035, speed: 0.0008, phase: Math.random() * Math.PI * 2 },
+      { freq: 3, amp: 0.085, speed: 0.0011, phase: Math.random() * Math.PI * 2, modSpeed: 0.00033, modPhase: Math.random() * Math.PI * 2 },
+      { freq: 5, amp: 0.055, speed: 0.0016, phase: Math.random() * Math.PI * 2, modSpeed: 0.00047, modPhase: Math.random() * Math.PI * 2 },
+      { freq: 2, amp: 0.045, speed: 0.0008, phase: Math.random() * Math.PI * 2, modSpeed: 0.00026, modPhase: Math.random() * Math.PI * 2 },
+      { freq: 4, amp: 0.035, speed: 0.0013, phase: Math.random() * Math.PI * 2, modSpeed: 0.00039, modPhase: Math.random() * Math.PI * 2 },
     ];
 
     // Photophores — tiny internal light cells suspended inside the body.
@@ -74,7 +77,10 @@ export class Player {
       const a = (i / SEG) * Math.PI * 2;
       let rMul = 1;
       for (const m of this.membrane) {
-        rMul += m.amp * Math.sin(a * m.freq + now * m.speed + m.phase);
+        // Slowly modulate each ripple's strength so lobes swell and fade,
+        // letting the outline drift through different forms over time.
+        const amp = m.amp * (0.55 + 0.45 * Math.sin(now * m.modSpeed + m.modPhase));
+        rMul += amp * Math.sin(a * m.freq + now * m.speed + m.phase);
       }
       const r = radius * rMul;
       const px = cx + Math.cos(a) * r;
