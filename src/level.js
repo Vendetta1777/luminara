@@ -203,10 +203,7 @@ export function createOceanLevel() {
     rect(-220, 2600, 200, 36, true),
     rect(-460, 2980, 920, 220),   // abyss floor
   ];
-  const anchors = [
-    { x: 0, y: 250 }, { x: -250, y: 600 }, { x: 240, y: 900 },
-    { x: -120, y: 1180 }, { x: 200, y: 1480 }, { x: -240, y: 1800 },
-    { x: 120, y: 2120 }, { x: -160, y: 2440 }, { x: 80, y: 2760 },
-  ].map((a) => ({ ...a, phase: Math.random() * TAU }));
-  return new Level(spawn, solids, anchors);
+  // No anchors in the Ocean — the Tendril Tether is the Forest's signature
+  // ability. The engine support (Level anchors, player tether) stays dormant.
+  return new Level(spawn, solids);
 }

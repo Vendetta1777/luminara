@@ -51,19 +51,15 @@ window.addEventListener('pointerup', (e) => { if (e.button !== 2) game.input.thr
 window.addEventListener('pointercancel', () => { game.input.thrusting = false; });
 window.addEventListener('contextmenu', (e) => e.preventDefault()); // free up right-click
 
-// Keyboard: Space = Burst-Dash toward the cursor, F = Flare, Shift = Tether.
+// Keyboard: Space = Burst-Dash toward the cursor, F = Flare.
+// (Tether/Shift is deferred to the Forest biome.)
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
     game.player.burstDash(game.input.aimX, game.input.aimY);
   } else if (e.key === 'f' || e.key === 'F') {
     game.player.flare();
-  } else if (e.key === 'Shift') {
-    game.tetherPress();   // keydown repeats are no-ops while already tethered
   }
-});
-window.addEventListener('keyup', (e) => {
-  if (e.key === 'Shift') game.tetherRelease();
 });
 
 game.start();
