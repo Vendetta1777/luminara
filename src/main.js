@@ -29,10 +29,10 @@ window.addEventListener('resize', resizeCanvas);
 
 // Unified input: one handler for mouse, touch, and pen via Pointer Events.
 // We convert the pointer to WORLD coordinates (screen + camera offset) so the
-// creature thrusts toward the right spot as the world scrolls.
+// creature aims at the right spot as the world scrolls.
 //
-// TEMPORARY scheme for Milestone 5: hold to thrust toward the cursor, release
-// to drift. Milestone 6 replaces this with charge-and-release Pulse-Jet.
+// Pulse-Jet: press & hold to charge (the creature contracts), release to fire a
+// burst toward the cursor. `thrusting` means "charging" to the player.
 function aimAt(e) {
   const rect = canvas.getBoundingClientRect();
   game.input.aimX = (e.clientX - rect.left) + game.camera.x;

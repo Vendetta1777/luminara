@@ -23,9 +23,18 @@ export class Player {
     this.vx = 0;
     this.vy = 0;
     this.sinkAccel = 0.016;    // gentle downward buoyant pull (px / frame²)
-    this.thrustAccel = 0.45;   // TEMP hold-to-thrust strength (replaced in M6)
     this.drag = 0.93;          // water resistance per ~16.67ms frame (0..1)
-    this.maxSpeed = 11;        // clamp so motion never runs away
+    this.maxSpeed = 11;        // top-speed clamp
+
+    // --- Pulse-Jet: charge while held, burst on release ---
+    this.charging = false;
+    this.charge = 0;           // 0..1 build-up while held
+    this.chargeRate = 1 / 45;  // ~0.75s to reach a full charge
+    this.minImpulse = 3.0;     // a quick tap still nudges you
+    this.maxImpulse = 12.0;    // a full charge launches hard
+    this.releaseAnim = 0;      // 1 -> 0 "pop" right after firing
+    this.aimX = this.x;        // world-space aim, updated while charging
+    this.aimY = this.y;
 
     this.size = 20;
     this.color = '#5de4f5';
@@ -64,18 +73,19 @@ export class Player {
   update(deltaTime, input) {
     const dtf = deltaTime / 16.6667;
 
+    // Pulse-Jet: build charge while held, fire a burst on release.
+    if (input && input.thrusting) {
+      this.charging = true;
+      this.charge = Math.min(1, this.charge + this.chargeRate * dtf);
+      this.aimX = input.aimX;   // aim can be adjusted mid-charge
+      this.aimY = input.aimY;
+    } else if (this.charging) {
+      this._fire();
+      this.charging = false;
+    }
+
     // Buoyant sink — the world's gentle "gravity".
     this.vy += this.sinkAccel * dtf;
-
-    // TEMPORARY control to feel the physics: hold to thrust toward the aim.
-    // Milestone 6 replaces this with charge-and-release Pulse-Jet.
-    if (input && input.thrusting) {
-      const dx = input.aimX - this.x;
-      const dy = input.aimY - this.y;
-      const len = Math.hypot(dx, dy) || 1;
-      this.vx += (dx / len) * this.thrustAccel * dtf;
-      this.vy += (dy / len) * this.thrustAccel * dtf;
-    }
 
     // Water drag (frame-rate independent), then clamp top speed.
     const drag = Math.pow(this.drag, dtf);
@@ -92,6 +102,23 @@ export class Player {
     this.y += this.vy * dtf;
     this.trailPoints.push({ x: this.x, y: this.y });
     if (this.trailPoints.length > this.maxTrail) this.trailPoints.shift();
+
+    // Decay the post-release "pop".
+    if (this.releaseAnim > 0) {
+      this.releaseAnim = Math.max(0, this.releaseAnim - dtf * 0.09);
+    }
+  }
+
+  /** Fire a propulsion burst toward the aim, scaled by the current charge. */
+  _fire() {
+    const dx = this.aimX - this.x;
+    const dy = this.aimY - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const power = this.minImpulse + this.charge * (this.maxImpulse - this.minImpulse);
+    this.vx += (dx / len) * power;
+    this.vy += (dy / len) * power;
+    this.releaseAnim = 1;
+    this.charge = 0;
   }
 
   /** Trace the organic (non-circular) membrane outline as a closed path. */
@@ -116,9 +143,14 @@ export class Player {
   draw(ctx) {
     const now = Date.now();
     const pulse = Math.sin(now * 0.003 * this.pulseSpeed) * 3;
-    const radius = Math.max(2, this.size + pulse);
-    const flicker = 0.82 + 0.18 * (0.6 * Math.sin(now * 0.0021) +
-                                   0.4 * Math.sin(now * 0.0039 + 1.3));
+    // Charging contracts the body (a jellyfish tensing); release pops it back.
+    const squish = 1 - 0.30 * this.charge;
+    const pop = 1 + 0.5 * this.releaseAnim;
+    const radius = Math.max(2, (this.size + pulse) * squish * pop);
+    // Gathered light brightens the glow as charge builds.
+    const chargeGlow = 1 + 0.6 * this.charge;
+    const flicker = (0.82 + 0.18 * (0.6 * Math.sin(now * 0.0021) +
+                                    0.4 * Math.sin(now * 0.0039 + 1.3))) * chargeGlow;
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -201,6 +233,34 @@ export class Player {
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(px, py, pr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Aim & power beam — only while charging. Shows launch direction; the tip
+    // reaches further and brightens as the charge builds.
+    if (this.charging) {
+      const dx = this.aimX - this.x;
+      const dy = this.aimY - this.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = dx / len, ny = dy / len;
+      const reach = radius * 1.4 + this.charge * 46;
+      const tipX = this.x + nx * reach;
+      const tipY = this.y + ny * reach;
+
+      ctx.strokeStyle = hexToRgba(this.accentColor, 0.16 + 0.24 * this.charge);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.x + nx * radius, this.y + ny * radius);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+
+      const tipR = 3 + this.charge * 5;
+      const tip = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, tipR);
+      tip.addColorStop(0, hexToRgba('#ffffff', 0.7 * (0.4 + 0.6 * this.charge)));
+      tip.addColorStop(1, hexToRgba(this.glowColor, 0));
+      ctx.fillStyle = tip;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, tipR, 0, Math.PI * 2);
       ctx.fill();
     }
 
