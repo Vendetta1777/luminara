@@ -92,6 +92,23 @@ export class World {
     ctx.restore();
   }
 
+  /**
+   * Abyss darkness: as you descend, the deep goes dark and only a flashlight-
+   * like glow around the creature stays lit. Flare (a larger lightRadius) blows
+   * it open temporarily. Drawn in screen space over the world.
+   */
+  drawDarkness(ctx, camera, px, py, w, h, lightRadius) {
+    const dark = this._depth(camera) * 0.92;
+    if (dark < 0.01) return;
+    const sx = px - camera.x;
+    const sy = py - camera.y;
+    const g = ctx.createRadialGradient(sx, sy, lightRadius * 0.35, sx, sy, lightRadius);
+    g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    g.addColorStop(1, `rgba(0, 0, 0, ${dark})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
   /** Foreground overlay (vignette), drawn on top of everything but the HUD. */
   drawOverlay(ctx, w, h) {
     const g = ctx.createRadialGradient(

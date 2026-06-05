@@ -38,6 +38,15 @@ export class Player {
     this.aimX = this.x;        // world-space aim (the pull point), updated while charging
     this.aimY = this.y;
 
+    // --- Bioluminescent Bloom: absorbed light powers abilities ---
+    this.light = 0;
+    this.maxLight = 100;
+    this.dashCost = 35;
+    this.flareCost = 30;
+    this.dashSpeed = 24;       // dash exceeds normal top speed (a hard lunge)
+    this.invuln = 0;           // i-frame timer (ms) during a dash
+    this.flareTime = 0;        // 1 -> 0 flare animation
+
     this.size = 20;
     this.color = '#5de4f5';
     this.glowColor = '#5de4f5';
@@ -89,14 +98,16 @@ export class Player {
     // Buoyant sink — the world's gentle "gravity".
     this.vy += this.sinkAccel * dtf;
 
-    // Water drag (frame-rate independent), then clamp top speed.
+    // Water drag (frame-rate independent), then clamp speed. During a dash the
+    // cap is raised so the lunge genuinely exceeds normal top speed.
     const drag = Math.pow(this.drag, dtf);
     this.vx *= drag;
     this.vy *= drag;
+    const cap = this.invuln > 0 ? this.dashSpeed : this.maxSpeed;
     const sp = Math.hypot(this.vx, this.vy);
-    if (sp > this.maxSpeed) {
-      this.vx = (this.vx / sp) * this.maxSpeed;
-      this.vy = (this.vy / sp) * this.maxSpeed;
+    if (sp > cap) {
+      this.vx = (this.vx / sp) * cap;
+      this.vy = (this.vy / sp) * cap;
     }
 
     // Integrate position, then record the world-space trail.
@@ -105,10 +116,40 @@ export class Player {
     this.trailPoints.push({ x: this.x, y: this.y });
     if (this.trailPoints.length > this.maxTrail) this.trailPoints.shift();
 
-    // Decay the post-release "pop".
+    // Decay the post-release "pop", dash i-frames, and flare animation.
     if (this.releaseAnim > 0) {
       this.releaseAnim = Math.max(0, this.releaseAnim - dtf * 0.09);
     }
+    if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - deltaTime);
+    if (this.flareTime > 0) this.flareTime = Math.max(0, this.flareTime - deltaTime * 0.0014);
+  }
+
+  /** Add absorbed light to the meter (capped). */
+  gainLight(amount) {
+    this.light = Math.min(this.maxLight, this.light + amount);
+  }
+
+  /** Spend light for a fast lunge toward (tx,ty) with brief invulnerability. */
+  burstDash(tx, ty) {
+    if (this.light < this.dashCost) return false;
+    this.light -= this.dashCost;
+    const dx = tx - this.x, dy = ty - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    this.vx = (dx / len) * this.dashSpeed;
+    this.vy = (dy / len) * this.dashSpeed;
+    this.invuln = 380;
+    this.releaseAnim = 1;
+    this.shockX = this.x;
+    this.shockY = this.y;
+    return true;
+  }
+
+  /** Spend light to flare — a burst that reveals dark surroundings. */
+  flare() {
+    if (this.light < this.flareCost) return false;
+    this.light -= this.flareCost;
+    this.flareTime = 1;
+    return true;
   }
 
   /**
@@ -156,8 +197,9 @@ export class Player {
     const radius = Math.max(2, (this.size + pulse) * squish * pop);
     // Gathered light brightens the glow as charge builds.
     const chargeGlow = 1 + 0.6 * this.charge;
+    const dashGlow = this.invuln > 0 ? 1.4 : 1;   // brighter mid-dash
     const flicker = (0.82 + 0.18 * (0.6 * Math.sin(now * 0.0021) +
-                                    0.4 * Math.sin(now * 0.0039 + 1.3))) * chargeGlow;
+                                    0.4 * Math.sin(now * 0.0039 + 1.3))) * chargeGlow * dashGlow;
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -332,6 +374,24 @@ export class Player {
       ctx.beginPath();
       ctx.arc(this.shockX, this.shockY, ringR, 0, TAU);
       ctx.stroke();
+    }
+
+    // 10. Flare — a big bright ring of light bursting outward, plus a flash.
+    if (this.flareTime > 0) {
+      const prog = 1 - this.flareTime;
+      const ringR = radius + prog * 280;
+      ctx.strokeStyle = hexToRgba(this.accentColor, 0.5 * this.flareTime);
+      ctx.lineWidth = 2 + 6 * this.flareTime;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, ringR, 0, TAU);
+      ctx.stroke();
+      const fg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, ringR);
+      fg.addColorStop(0, hexToRgba('#ffffff', 0.10 * this.flareTime));
+      fg.addColorStop(1, hexToRgba(this.glowColor, 0));
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, ringR, 0, TAU);
+      ctx.fill();
     }
 
     ctx.restore();

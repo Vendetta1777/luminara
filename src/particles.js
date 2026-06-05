@@ -4,14 +4,14 @@
 // pre-allocated pool and pre-rendered glow sprites — no per-frame allocation or
 // shadowBlur.
 
-import { clamp, createGlowSprite } from './utils.js';
+import { createGlowSprite } from './utils.js';
 
 // Ocean palette — cohesive cool "underwater" tones (cyan, teal, soft blue,
 // deep-sea violet). Each future biome will get its own palette.
 const PALETTE = ['#5de4f5', '#34d399', '#60a5fa', '#a78bfa'];
 const MAX_PARTICLES = 80;
 const WRAP_MARGIN = 80;        // how far past the view edge before wrapping
-const PLAYER_SIZE_CAP = 80;
+const LIGHT_PER_MOTE = 8;      // glow-meter fill per absorbed mote
 
 function rand(min, max) {
   return min + Math.random() * (max - min);
@@ -110,9 +110,9 @@ export class ParticleSystem {
     }
   }
 
-  /** Absorb a particle: grow the player, throw sparkles, recycle the mote. */
+  /** Absorb a particle: feed the glow meter, throw sparkles, recycle the mote. */
   _absorb(p, player, view) {
-    player.size = clamp(player.size + 0.5, 0, PLAYER_SIZE_CAP);
+    player.gainLight(LIGHT_PER_MOTE);
     for (let i = 0; i < 4; i++) {
       this.sparkles.push(new Sparkle(p.x, p.y, p.color));
     }

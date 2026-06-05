@@ -2,7 +2,7 @@
 // Owns the requestAnimationFrame loop and (later) orchestrates every system
 // (world, particles, player, ui) in the correct draw order each frame.
 
-import { clamp, lerp } from './utils.js';
+import { clamp, lerp, hexToRgba } from './utils.js';
 import { Player } from './player.js';
 import { ParticleSystem } from './particles.js';
 import { Camera } from './camera.js';
@@ -138,8 +138,32 @@ export class Game {
     this.player.draw(ctx);             // creature on top
     ctx.restore();
 
+    // Abyss darkness + flashlight (Flare widens the lit radius).
+    const lightRadius = 220 + this.player.flareTime * 720;
+    this.world.drawDarkness(ctx, this.camera, this.player.x, this.player.y,
+      this.width, this.height, lightRadius);
+
     this.world.drawOverlay(ctx, this.width, this.height);
-    this._drawFps(ctx);   // HUD stays screen-fixed
+    this._drawFps(ctx);          // HUD stays screen-fixed
+    this._drawLightMeter(ctx);
+  }
+
+  /** Temporary glow-meter readout (the full HUD arrives in Milestone 13). */
+  _drawLightMeter(ctx) {
+    const p = this.player;
+    const x = 12, y = this.height - 22, w = 160, h = 6;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.fillRect(x, y, w, h);
+    const ready = p.light >= p.dashCost;
+    ctx.fillStyle = hexToRgba('#5de4f5', ready ? 0.85 : 0.4);
+    ctx.fillRect(x, y, w * (p.light / p.maxLight), h);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.font = '11px monospace';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('light', x, y - 3);
+    ctx.restore();
   }
 
   /** Tiny, unobtrusive FPS readout, top-left. */

@@ -39,9 +39,27 @@ function aimAt(e) {
   game.input.aimY = (e.clientY - rect.top) + game.camera.y;
 }
 window.addEventListener('pointermove', aimAt);
-window.addEventListener('pointerdown', (e) => { aimAt(e); game.input.thrusting = true; });
-window.addEventListener('pointerup', () => { game.input.thrusting = false; });
+window.addEventListener('pointerdown', (e) => {
+  aimAt(e);
+  if (e.button === 2) {
+    game.player.burstDash(game.input.aimX, game.input.aimY);  // right-click = dash
+  } else {
+    game.input.thrusting = true;                              // left = charge
+  }
+});
+window.addEventListener('pointerup', (e) => { if (e.button !== 2) game.input.thrusting = false; });
 window.addEventListener('pointercancel', () => { game.input.thrusting = false; });
+window.addEventListener('contextmenu', (e) => e.preventDefault()); // free up right-click
+
+// Keyboard: Space = Burst-Dash toward the cursor, F = Flare.
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    game.player.burstDash(game.input.aimX, game.input.aimY);
+  } else if (e.key === 'f' || e.key === 'F') {
+    game.player.flare();
+  }
+});
 
 game.start();
 
