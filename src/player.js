@@ -24,16 +24,18 @@ export class Player {
     this.vy = 0;
     this.sinkAccel = 0.016;    // gentle downward buoyant pull (px / frame²)
     this.drag = 0.93;          // water resistance per ~16.67ms frame (0..1)
-    this.maxSpeed = 11;        // top-speed clamp
+    this.maxSpeed = 16;        // top-speed clamp (raised so a full dash carries)
 
-    // --- Pulse-Jet: charge while held, burst on release ---
+    // --- Pulse-Jet (slingshot): charge while held, fling AWAY from the aim ---
     this.charging = false;
     this.charge = 0;           // 0..1 build-up while held
     this.chargeRate = 1 / 45;  // ~0.75s to reach a full charge
-    this.minImpulse = 3.0;     // a quick tap still nudges you
-    this.maxImpulse = 12.0;    // a full charge launches hard
-    this.releaseAnim = 0;      // 1 -> 0 "pop" right after firing
-    this.aimX = this.x;        // world-space aim, updated while charging
+    this.minImpulse = 3.5;     // a quick tap still nudges you
+    this.maxImpulse = 16.0;    // a full charge launches hard and far
+    this.releaseAnim = 0;      // 1 -> 0 dash animation right after firing
+    this.shockX = 0;           // shockwave origin (set at fire)
+    this.shockY = 0;
+    this.aimX = this.x;        // world-space aim (the pull point), updated while charging
     this.aimY = this.y;
 
     this.size = 20;
@@ -109,15 +111,20 @@ export class Player {
     }
   }
 
-  /** Fire a propulsion burst toward the aim, scaled by the current charge. */
+  /**
+   * Slingshot release: fling AWAY from the aim (you pull the band toward the
+   * cursor, so you launch the opposite way), scaled by the current charge.
+   */
   _fire() {
-    const dx = this.aimX - this.x;
-    const dy = this.aimY - this.y;
+    const dx = this.x - this.aimX;   // away from the pull point
+    const dy = this.y - this.aimY;
     const len = Math.hypot(dx, dy) || 1;
     const power = this.minImpulse + this.charge * (this.maxImpulse - this.minImpulse);
     this.vx += (dx / len) * power;
     this.vy += (dy / len) * power;
     this.releaseAnim = 1;
+    this.shockX = this.x;            // shockwave bursts from where we launched
+    this.shockY = this.y;
     this.charge = 0;
   }
 
@@ -182,6 +189,24 @@ export class Player {
     ctx.arc(this.x, this.y, haloR, 0, Math.PI * 2);
     ctx.fill();
 
+    // --- Body group: squash & stretch along velocity (dash streak) plus a
+    //     charge tension jitter. Wraps the membrane, rim, nucleus, photophores.
+    const speed = Math.hypot(this.vx, this.vy);
+    const stretch = Math.min(1, speed / this.maxSpeed);
+    const jAmp = this.charging ? this.charge * 2 : 0;
+    const jx = (Math.sin(now * 0.07) + Math.sin(now * 0.11)) * 0.5 * jAmp;
+    const jy = (Math.cos(now * 0.06) + Math.sin(now * 0.13)) * 0.5 * jAmp;
+
+    ctx.save();
+    ctx.translate(this.x + jx, this.y + jy);
+    if (stretch > 0.05) {
+      const ang = Math.atan2(this.vy, this.vx);
+      ctx.rotate(ang);
+      ctx.scale(1 + 0.5 * stretch, 1 - 0.28 * stretch);
+      ctx.rotate(-ang);
+    }
+    ctx.translate(-this.x, -this.y);
+
     // 3. Membrane body — organic blob with a rich multi-stop gradient.
     ctx.beginPath();
     this._traceBody(ctx, this.x, this.y, radius * 1.04, now);
@@ -236,32 +261,77 @@ export class Player {
       ctx.fill();
     }
 
-    // Aim & power beam — only while charging. Shows launch direction; the tip
-    // reaches further and brightens as the charge builds.
+    ctx.restore();   // end body group (squash/stretch + jitter)
+
+    const TAU = Math.PI * 2;
+
+    // 7. Charge energy — light spiralling inward as you gather power.
+    if (this.charging) {
+      const sparks = 8;
+      for (let k = 0; k < sparks; k++) {
+        const t = ((now * 0.0016) + k / sparks) % 1;      // 0 (far) -> 1 (arrived)
+        const ang = (k / sparks) * TAU + now * 0.002 + t * 1.4;
+        const dist = (1 - t) * (radius * 3.4) + radius * 0.6;
+        const sx = this.x + Math.cos(ang) * dist;
+        const sy = this.y + Math.sin(ang) * dist;
+        const a = this.charge * (1 - t) * 0.7;
+        const sr = 2.2 * (0.4 + 0.6 * (1 - t));
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+        g.addColorStop(0, hexToRgba('#ffffff', a));
+        g.addColorStop(1, hexToRgba(this.accentColor, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // 8. Slingshot band — the bright "pull" toward the cursor and a faint hint
+    //    on the opposite side showing where you'll launch.
     if (this.charging) {
       const dx = this.aimX - this.x;
       const dy = this.aimY - this.y;
       const len = Math.hypot(dx, dy) || 1;
       const nx = dx / len, ny = dy / len;
-      const reach = radius * 1.4 + this.charge * 46;
-      const tipX = this.x + nx * reach;
-      const tipY = this.y + ny * reach;
 
-      ctx.strokeStyle = hexToRgba(this.accentColor, 0.16 + 0.24 * this.charge);
+      // Pull band toward the cursor (stretches + brightens with charge).
+      const reach = radius * 1.4 + this.charge * 50;
+      const pullX = this.x + nx * reach;
+      const pullY = this.y + ny * reach;
+      ctx.strokeStyle = hexToRgba(this.accentColor, 0.18 + 0.26 * this.charge);
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(this.x + nx * radius, this.y + ny * radius);
-      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(pullX, pullY);
       ctx.stroke();
-
       const tipR = 3 + this.charge * 5;
-      const tip = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, tipR);
+      const tip = ctx.createRadialGradient(pullX, pullY, 0, pullX, pullY, tipR);
       tip.addColorStop(0, hexToRgba('#ffffff', 0.7 * (0.4 + 0.6 * this.charge)));
       tip.addColorStop(1, hexToRgba(this.glowColor, 0));
       ctx.fillStyle = tip;
       ctx.beginPath();
-      ctx.arc(tipX, tipY, tipR, 0, Math.PI * 2);
+      ctx.arc(pullX, pullY, tipR, 0, TAU);
       ctx.fill();
+
+      // Faint launch hint, opposite side.
+      const hint = radius * 1.2 + this.charge * 24;
+      ctx.strokeStyle = hexToRgba(this.glowColor, 0.10 + 0.16 * this.charge);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.x - nx * radius, this.y - ny * radius);
+      ctx.lineTo(this.x - nx * hint, this.y - ny * hint);
+      ctx.stroke();
+    }
+
+    // 9. Dash shockwave — a ring bursting from the launch point.
+    if (this.releaseAnim > 0) {
+      const prog = 1 - this.releaseAnim;
+      const ringR = radius + prog * 72;
+      ctx.strokeStyle = hexToRgba(this.glowColor, 0.45 * this.releaseAnim);
+      ctx.lineWidth = 1.5 + 3.5 * this.releaseAnim;
+      ctx.beginPath();
+      ctx.arc(this.shockX, this.shockY, ringR, 0, TAU);
+      ctx.stroke();
     }
 
     ctx.restore();
