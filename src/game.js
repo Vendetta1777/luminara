@@ -6,6 +6,7 @@ import { clamp, lerp } from './utils.js';
 import { Player } from './player.js';
 import { ParticleSystem } from './particles.js';
 import { Camera } from './camera.js';
+import { createOceanLevel } from './level.js';
 
 export class Game {
   /**
@@ -26,6 +27,13 @@ export class Game {
 
     // The player creature (a physics body).
     this.player = new Player(canvas, ctx);
+
+    // The level geometry; place the creature at its spawn point.
+    this.level = createOceanLevel();
+    this.player.x = this.level.spawn.x;
+    this.player.y = this.level.spawn.y;
+    this.player.aimX = this.player.x;
+    this.player.aimY = this.player.y;
 
     // Steering input in WORLD coordinates, written by main.js each event.
     this.input = { thrusting: false, aimX: this.player.x, aimY: this.player.y };
@@ -106,9 +114,10 @@ export class Game {
    */
   update(deltaTime) {
     this.player.update(deltaTime, this.input);
+    this.level.collide(this.player);
     this.camera.follow(this.player.x, this.player.y, this.width, this.height, deltaTime);
     this.particles.update(deltaTime, this.player, this._view());
-    // world / ui updates arrive in later milestones.
+    // ui updates arrive in later milestones.
   }
 
   /** Render: clear the ocean (screen-space), then draw the world via camera. */
@@ -119,8 +128,9 @@ export class Game {
 
     ctx.save();
     this.camera.apply(ctx);
-    this.particles.draw(ctx);
-    this.player.draw(ctx);
+    this.particles.draw(ctx);          // ambient motes (behind the rock)
+    this.level.draw(ctx, this._view()); // coral geometry
+    this.player.draw(ctx);             // creature on top
     ctx.restore();
 
     this._drawFps(ctx);   // HUD stays screen-fixed
