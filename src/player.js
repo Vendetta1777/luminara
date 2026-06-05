@@ -22,10 +22,10 @@ export class Player {
     // --- Physics body ---
     this.vx = 0;
     this.vy = 0;
-    this.sinkAccel = 0.018;    // gentle downward buoyant pull (px / frame²)
-    this.thrustAccel = 0.55;   // TEMP hold-to-thrust strength (replaced in M6)
-    this.drag = 0.94;          // water resistance per ~16.67ms frame (0..1)
-    this.maxSpeed = 14;        // clamp so motion never runs away
+    this.sinkAccel = 0.016;    // gentle downward buoyant pull (px / frame²)
+    this.thrustAccel = 0.45;   // TEMP hold-to-thrust strength (replaced in M6)
+    this.drag = 0.93;          // water resistance per ~16.67ms frame (0..1)
+    this.maxSpeed = 11;        // clamp so motion never runs away
 
     this.size = 20;
     this.color = '#5de4f5';
