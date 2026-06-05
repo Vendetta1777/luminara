@@ -3,6 +3,7 @@
 // (world, particles, player, ui) in the correct draw order each frame.
 
 import { clamp } from './utils.js';
+import { Player } from './player.js';
 
 export class Game {
   /**
@@ -12,6 +13,9 @@ export class Game {
   constructor(canvas, ctx) {
     this.canvas = canvas;
     this.ctx = ctx;
+
+    // The player creature. Input (main.js) steers it via player.targetX/Y.
+    this.player = new Player(canvas, ctx);
 
     // Logical size in CSS pixels (what all game systems work in). The canvas
     // backing buffer may be larger on high-DPI screens; main.js keeps these
@@ -76,13 +80,16 @@ export class Game {
    * Systems get wired in over the coming milestones.
    */
   update(deltaTime) {
-    // world / particles / player / ui updates arrive in later milestones.
+    this.player.update(deltaTime);
+    // world / particles / ui updates arrive in later milestones.
   }
 
-  /** Render one frame. For now: clear to the deep ocean background. */
+  /** Render one frame: clear to the deep ocean, then draw the player on top. */
   draw() {
     const { ctx } = this;
     ctx.fillStyle = '#050a14';
     ctx.fillRect(0, 0, this.width, this.height);
+
+    this.player.draw(ctx);
   }
 }

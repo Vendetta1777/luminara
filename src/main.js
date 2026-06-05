@@ -25,6 +25,17 @@ const game = new Game(canvas, ctx);
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
+// Unified input: one handler for mouse, touch, and pen via Pointer Events.
+// We convert screen coords to canvas-local coords so it stays correct
+// regardless of the canvas's position on the page.
+function aimAt(e) {
+  const rect = canvas.getBoundingClientRect();
+  game.player.targetX = e.clientX - rect.left;
+  game.player.targetY = e.clientY - rect.top;
+}
+window.addEventListener('pointermove', aimAt);
+window.addEventListener('pointerdown', aimAt);
+
 game.start();
 
 console.log('Luminara — game loop started.');
