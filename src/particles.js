@@ -6,10 +6,8 @@
 import { clamp, createGlowSprite } from './utils.js';
 
 // Ocean palette — cohesive cool "underwater" tones (cyan, teal, soft blue,
-// deep-sea violet). In Milestone 5 this moves into the Ocean biome definition.
+// deep-sea violet). Each future biome will get its own palette.
 const PALETTE = ['#5de4f5', '#34d399', '#60a5fa', '#a78bfa'];
-const SPECIAL_COLOR = '#ff8fab';   // rare warm coral pip — a treat amid the cool
-const SPECIAL_CHANCE = 0.08;       // ~8% of motes are special
 const MAX_PARTICLES = 80;
 const EDGE_MARGIN = 40;   // keep spawns away from the very edges
 const PLAYER_SIZE_CAP = 80;
@@ -31,19 +29,9 @@ class Particle {
     this.driftX = rand(-0.3, 0.3);      // px per ~16.67ms frame
     this.driftY = rand(-0.3, 0.3);
     this.pulseOffset = rand(0, Math.PI * 2);
-
-    // Rare warm "special" mote: brighter and a little bigger so it stands out
-    // against the cool palette. Worth more growth when absorbed.
-    this.special = Math.random() < SPECIAL_CHANCE;
-    if (this.special) {
-      this.color = SPECIAL_COLOR;
-      this.size = rand(8, 14);
-      this.opacity = rand(0.85, 1.0);
-    } else {
-      this.color = PALETTE[(Math.random() * PALETTE.length) | 0];
-      this.size = rand(3, 12);
-      this.opacity = rand(0.4, 1.0);
-    }
+    this.color = PALETTE[(Math.random() * PALETTE.length) | 0];
+    this.size = rand(3, 12);
+    this.opacity = rand(0.4, 1.0);
   }
 }
 
@@ -73,7 +61,7 @@ export class ParticleSystem {
     // Pre-render one glow sprite per colour once. Stamped with drawImage each
     // frame instead of per-particle shadowBlur — the key performance win.
     this.sprites = {};
-    for (const col of [...PALETTE, SPECIAL_COLOR]) {
+    for (const col of PALETTE) {
       this.sprites[col] = createGlowSprite(col, 64);
     }
 
@@ -126,10 +114,8 @@ export class ParticleSystem {
 
   /** Absorb a particle: grow the player, throw sparkles, recycle the mote. */
   _absorb(p, player, w, h) {
-    const growth = p.special ? 1.2 : 0.5;   // special coral motes are worth more
-    const sparks = p.special ? 8 : 4;
-    player.size = clamp(player.size + growth, 0, PLAYER_SIZE_CAP);
-    for (let i = 0; i < sparks; i++) {
+    player.size = clamp(player.size + 0.5, 0, PLAYER_SIZE_CAP);
+    for (let i = 0; i < 4; i++) {
       this.sparkles.push(new Sparkle(p.x, p.y, p.color));
     }
     p.reset(w, h);   // recycle in place — no allocation, count stays at 80
