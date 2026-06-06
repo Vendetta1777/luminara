@@ -194,7 +194,7 @@ export class Game {
   /** Temporary HP bar (full HUD arrives in Milestone 19). */
   _drawHpBar(ctx) {
     const p = this.player;
-    const x = 12, y = this.height - 40, w = 160, h = 7;
+    const x = 12, y = this.height - 52, w = 160, h = 7;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
