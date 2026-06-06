@@ -151,7 +151,12 @@ class Darter extends Enemy {
   }
 }
 
-/** Gatekeeper — tanky, territorial; guards its spot and hits hard up close. */
+/**
+ * Gatekeeper — a tanky mini-boss guarding a chokepoint. Rather than ramming
+ * you, it slowly advances and unleashes a telegraphed SHOCKWAVE SLAM: a
+ * damaging ring you must dodge (dash through it, or be outside its reach).
+ * Between slams it's wide open — that's your window to shoot it.
+ */
 class Gatekeeper extends Enemy {
   constructor(x, y) {
     super(x, y);
@@ -159,48 +164,110 @@ class Gatekeeper extends Enemy {
     this.homeY = y;
     this.radius = 30;
     this.hp = this.maxHp = 140;
-    this.contactDmg = 22;
-    this.knockback = 16;
+    this.contactDmg = 16;
+    this.knockback = 14;
     this.color = '#ff5d73';
+
+    this.state = 'idle';      // idle -> windup -> slam -> recover
+    this.stateTime = 900 + Math.random() * 800;
+    this.attackRange = 360;
+    this.windupDur = 700;
+    this.slamDur = 480;
+    this.recoverDur = 1100;
+    this.slamMax = 250;
+    this.slamRadius = 0;
+    this.slamHit = false;
+    this.slamDamage = 24;
   }
 
   update(dt, player, level) {
     const dtf = dt / 16.6667;
-    const d = Math.hypot(player.x - this.x, player.y - this.y) || 1;
-    const chasing = d < 280;
-    const tx = chasing ? player.x : this.homeX;
-    const ty = chasing ? player.y : this.homeY;
-    const ddx = tx - this.x, ddy = ty - this.y, dd = Math.hypot(ddx, ddy) || 1;
-    const accel = chasing ? 0.34 : 0.14;
-    this.vx += (ddx / dd) * accel * dtf;
-    this.vy += (ddy / dd) * accel * dtf;
+    const dx = player.x - this.x, dy = player.y - this.y;
+    const d = Math.hypot(dx, dy) || 1;
+    this.stateTime -= dt;
+
+    if (this.state === 'idle') {
+      if (d < this.attackRange) {
+        this.vx *= 0.9; this.vy *= 0.9;
+        if (this.stateTime <= 0) { this.state = 'windup'; this.stateTime = this.windupDur; }
+      } else if (d < 720) {
+        this.vx += (dx / d) * 0.12 * dtf;     // lumber closer — can't be camped
+        this.vy += (dy / d) * 0.12 * dtf;
+        if (this.stateTime <= 0) this.stateTime = 400;
+      } else {
+        const hx = this.homeX - this.x, hy = this.homeY - this.y, hd = Math.hypot(hx, hy) || 1;
+        this.vx += (hx / hd) * 0.08 * dtf;
+        this.vy += (hy / hd) * 0.08 * dtf;
+        if (this.stateTime <= 0) this.stateTime = 400;
+      }
+    } else if (this.state === 'windup') {
+      this.vx *= 0.8; this.vy *= 0.8;
+      if (this.stateTime <= 0) {
+        this.state = 'slam'; this.stateTime = this.slamDur;
+        this.slamRadius = 0; this.slamHit = false;
+      }
+    } else if (this.state === 'slam') {
+      this.slamRadius = (1 - this.stateTime / this.slamDur) * this.slamMax;
+      if (!this.slamHit && this.slamRadius > 12 && Math.abs(d - this.slamRadius) < 30) {
+        if (player.damage(this.slamDamage)) {
+          player.vx += (dx / d) * 18;
+          player.vy += (dy / d) * 18;
+          this.slamHit = true;
+        }
+      }
+      if (this.stateTime <= 0) { this.state = 'recover'; this.stateTime = this.recoverDur; }
+    } else {
+      this.vx *= 0.9; this.vy *= 0.9;
+      if (this.stateTime <= 0) { this.state = 'idle'; this.stateTime = 400; }
+    }
+
     const drag = Math.pow(0.9, dtf);
     this.vx *= drag; this.vy *= drag;
-    const maxsp = chasing ? 3.2 : 1.8;
     const sp = Math.hypot(this.vx, this.vy);
-    if (sp > maxsp) { this.vx = (this.vx / sp) * maxsp; this.vy = (this.vy / sp) * maxsp; }
+    if (sp > 2.4) { this.vx = (this.vx / sp) * 2.4; this.vy = (this.vy / sp) * 2.4; }
     this.x += this.vx * dtf;
     this.y += this.vy * dtf;
 
-    if (level) level.collideCircle(this, this.radius, 0);   // no phasing through rock
+    if (level) level.collideCircle(this, this.radius, 0);
     this._contact(player);
     this._decay(dt);
   }
 
   draw(ctx) {
     const r = this.radius;
+    const charging = this.state === 'windup';
     const c = this._bodyColor();
     ctx.save();
+
+    // Telegraph: a pulsing danger ring at the slam's reach + a charging glow.
+    if (charging) {
+      const t = 1 - this.stateTime / this.windupDur;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = hexToRgba('#ff5d73', 0.15 + 0.3 * Math.abs(Math.sin(t * Math.PI * 5)));
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.slamMax, 0, TAU);
+      ctx.stroke();
+      const cg = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 2);
+      cg.addColorStop(0, hexToRgba('#ffffff', 0.35 * t));
+      cg.addColorStop(1, hexToRgba('#ff5d73', 0));
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, r * 2, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
     ctx.fillStyle = '#1a0a10';        // dark armored body
     ctx.beginPath();
     ctx.arc(this.x, this.y, r, 0, TAU);
     ctx.fill();
 
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = hexToRgba(c, 0.6);
+    ctx.strokeStyle = hexToRgba(c, charging ? 0.9 : 0.6);
     ctx.lineWidth = 3;
     ctx.shadowColor = this.color;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = charging ? 18 : 12;
     ctx.beginPath();
     ctx.arc(this.x, this.y, r, 0, TAU);
     ctx.stroke();
@@ -217,6 +284,20 @@ class Gatekeeper extends Enemy {
       ctx.arc(ex, ey, r * 0.32, 0, TAU);
       ctx.fill();
     }
+
+    // The expanding shockwave during a slam.
+    if (this.state === 'slam') {
+      const a = this.stateTime / this.slamDur;
+      ctx.strokeStyle = hexToRgba('#ff7a59', 0.3 + 0.6 * a);
+      ctx.lineWidth = 5;
+      ctx.shadowColor = '#ff5d73';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.slamRadius, 0, TAU);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
     this._drawHpArc(ctx, r);
     ctx.restore();
   }
