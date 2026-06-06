@@ -74,26 +74,40 @@ class Darter extends Enemy {
     this.color = '#ff8a4c';
     this.dartTimer = Math.random() * 2000;
     this.dartTime = 0;
+    this.canChase = true;          // counts toward the aggro cap
+    this.detectRange = 520;        // only engages within this range
+    this.aggro = false;            // set by EnemySystem (capped # of chasers)
+    this.wanderPhase = Math.random() * TAU;
   }
 
   update(dt, player) {
     const dtf = dt / 16.6667;
-    const dx = player.x - this.x, dy = player.y - this.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const nx = dx / d, ny = dy / d;
+    let maxsp;
 
-    this.dartTimer -= dt;
-    if (this.dartTimer <= 0 && d < 480) {
-      this.dartTime = 320;
-      this.dartTimer = 1500 + Math.random() * 900;
+    if (this.aggro) {
+      const dx = player.x - this.x, dy = player.y - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const nx = dx / d, ny = dy / d;
+      this.dartTimer -= dt;
+      if (this.dartTimer <= 0 && d < 480) {
+        this.dartTime = 320;
+        this.dartTimer = 1500 + Math.random() * 900;
+      }
+      let accel;
+      if (this.dartTime > 0) { this.dartTime -= dt; accel = 1.4; maxsp = 12; }
+      else { accel = 0.42; maxsp = 5.5; }
+      this.vx += nx * accel * dtf;
+      this.vy += ny * accel * dtf;
+    } else {
+      // Not chasing — drift idly until it gets an aggro slot.
+      this.dartTime = 0;
+      this.wanderPhase += dt * 0.0012;
+      this.vx += Math.cos(this.wanderPhase) * 0.05 * dtf;
+      this.vy += Math.sin(this.wanderPhase * 0.8) * 0.05 * dtf;
+      maxsp = 1.8;
     }
-    let accel, maxsp;
-    if (this.dartTime > 0) { this.dartTime -= dt; accel = 1.4; maxsp = 12; }
-    else { accel = 0.42; maxsp = 5.5; }
 
-    this.vx += nx * accel * dtf;
-    this.vy += ny * accel * dtf;
-    const drag = Math.pow(0.92, dtf);
+    const drag = Math.pow(this.aggro ? 0.92 : 0.96, dtf);
     this.vx *= drag; this.vy *= drag;
     const sp = Math.hypot(this.vx, this.vy);
     if (sp > maxsp) { this.vx = (this.vx / sp) * maxsp; this.vy = (this.vy / sp) * maxsp; }
@@ -222,6 +236,20 @@ export class EnemySystem {
   }
 
   update(dt, player, level) {
+    // Cap how many chasers can aggro at once — only the nearest few engage,
+    // so you can never be swarmed by the whole school.
+    const MAX_AGGRO = 2;
+    const chasers = this.list.filter((e) => !e.dead && e.canChase);
+    chasers.sort((a, b) =>
+      ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) -
+      ((b.x - player.x) ** 2 + (b.y - player.y) ** 2));
+    let slots = MAX_AGGRO;
+    for (const e of chasers) {
+      const inRange = Math.hypot(e.x - player.x, e.y - player.y) < e.detectRange;
+      e.aggro = inRange && slots > 0;
+      if (e.aggro) slots--;
+    }
+
     for (const e of this.list) if (!e.dead) e.update(dt, player, level);
     const dead = this.list.filter((e) => e.dead);
     if (dead.length) {

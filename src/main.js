@@ -41,22 +41,19 @@ function aimAt(e) {
 window.addEventListener('pointermove', aimAt);
 window.addEventListener('pointerdown', (e) => {
   aimAt(e);
-  if (e.button === 2) {
-    game.player.burstDash(game.input.aimX, game.input.aimY);  // right-click = dash
-  } else {
-    game.input.thrusting = true;                              // left = charge
-  }
+  if (e.button === 0) game.input.thrusting = true;   // left = Pulse-Jet charge
 });
-window.addEventListener('pointerup', (e) => { if (e.button !== 2) game.input.thrusting = false; });
+window.addEventListener('pointerup', (e) => { if (e.button === 0) game.input.thrusting = false; });
 window.addEventListener('pointercancel', () => { game.input.thrusting = false; });
-window.addEventListener('contextmenu', (e) => e.preventDefault()); // free up right-click
 
-// Keyboard: Space = fire torpedo (held = auto-fire), F = Flare, R = respawn.
-// Right-click stays Burst-Dash. Tether/Shift is deferred to the Forest.
+// Keyboard: Space = fire torpedo (held = auto-fire), Shift = Burst-Dash,
+// F = Flare, R = respawn.
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
     game.input.firing = true;     // game.update fires while held (cooldown-gated)
+  } else if (e.key === 'Shift' && !e.repeat) {
+    game.player.burstDash(game.input.aimX, game.input.aimY);  // one dash per press
   } else if (e.key === 'f' || e.key === 'F') {
     game.player.flare();
   } else if (e.key === 'r' || e.key === 'R') {

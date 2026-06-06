@@ -41,7 +41,7 @@ export class Player {
     // --- Bioluminescent Bloom: absorbed light powers abilities ---
     this.light = 0;
     this.maxLight = 100;
-    this.dashCost = 35;
+    this.dashCost = 25;        // full light meter (100) = 4 dashes
     this.flareCost = 30;
     this.dashSpeed = 24;       // dash exceeds normal top speed (a hard lunge)
     this.invuln = 0;           // damage-immunity timer (ms): dash + post-hit mercy
