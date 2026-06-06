@@ -37,6 +37,14 @@ export class Level {
     this.respawn = { ...spawn };
   }
 
+  /** True if the point is inside any solid (used by projectiles). */
+  pointInSolid(x, y) {
+    for (const s of this.solids) {
+      if (x > s.left && x < s.right && y > s.top && y < s.bottom) return true;
+    }
+    return false;
+  }
+
   /**
    * Per-frame interactions (hazards, checkpoints, gate). Returns events for the
    * game to react to (shake, transition). Forgiving: hazards never kill.

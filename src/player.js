@@ -54,6 +54,13 @@ export class Player {
     this.dead = false;
     this.hurtFlash = 0;        // 1 -> 0 red flash when damaged
 
+    // --- Weapon: water torpedo (stats are upgradeable later) ---
+    this.fireRate = 240;       // ms between shots
+    this.fireCooldown = 0;
+    this.torpedoSpeed = 11;
+    this.torpedoDamage = 22;
+    this.torpedoRange = 540;
+
     // --- Tendril Tether: swing from an anchor ---
     this.tetherAnchor = null;  // {x, y} while grappling, else null
     this.ropeLength = 0;       // taut length captured at attach
@@ -152,6 +159,7 @@ export class Player {
     if (this.dashTime > 0) this.dashTime = Math.max(0, this.dashTime - deltaTime);
     if (this.flareTime > 0) this.flareTime = Math.max(0, this.flareTime - deltaTime * 0.0014);
     if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - deltaTime * 0.003);
+    if (this.fireCooldown > 0) this.fireCooldown = Math.max(0, this.fireCooldown - deltaTime);
   }
 
   /** Add absorbed light to the meter (capped). */

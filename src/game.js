@@ -8,6 +8,7 @@ import { ParticleSystem } from './particles.js';
 import { Camera } from './camera.js';
 import { createOceanLevel } from './level.js';
 import { World } from './world.js';
+import { ProjectileSystem } from './projectiles.js';
 
 export class Game {
   /**
@@ -40,7 +41,10 @@ export class Game {
     this.player.aimY = this.player.y;
 
     // Steering input in WORLD coordinates, written by main.js each event.
-    this.input = { thrusting: false, aimX: this.player.x, aimY: this.player.y };
+    this.input = { thrusting: false, firing: false, aimX: this.player.x, aimY: this.player.y };
+
+    // Water-torpedo projectiles.
+    this.projectiles = new ProjectileSystem();
 
     // Follow-camera, snapped to frame the creature at startup (no opening jolt).
     this.camera = new Camera();
@@ -82,6 +86,21 @@ export class Game {
 
   tetherRelease() {
     this.player.releaseTether();
+  }
+
+  /** Fire a water torpedo toward the cursor (gated by the weapon cooldown). */
+  fire() {
+    const p = this.player;
+    if (p.fireCooldown > 0 || p.dead) return;
+    const dx = this.input.aimX - p.x, dy = this.input.aimY - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    this.projectiles.spawn(p.x + ux * p.size, p.y + uy * p.size, ux * p.torpedoSpeed, uy * p.torpedoSpeed, {
+      range: p.torpedoRange, damage: p.torpedoDamage, radius: 7, team: 'player',
+    });
+    p.fireCooldown = p.fireRate;
+    p.vx -= ux * 1.2;   // gentle recoil
+    p.vy -= uy * 1.2;
   }
 
   /** Respawn the creature at the last activated checkpoint. */
@@ -140,7 +159,9 @@ export class Game {
    * Systems get wired in over the coming milestones.
    */
   update(deltaTime) {
+    if (this.input.firing) this.fire();
     this.player.update(deltaTime, this.input);
+    this.projectiles.update(deltaTime, this.level);
     const impact = this.level.collide(this.player);
     if (impact > 6) this.camera.triggerShake(Math.min(9, impact * 0.6));
 
@@ -169,6 +190,7 @@ export class Game {
     this.particles.draw(ctx);          // ambient motes (behind the rock)
     this.level.draw(ctx, this._view(), this.player); // coral geometry + anchors
     this.player.draw(ctx);             // creature on top
+    this.projectiles.draw(ctx);        // torpedoes over everything in-world
     ctx.restore();
 
     // Abyss darkness + flashlight (Flare widens the lit radius).
