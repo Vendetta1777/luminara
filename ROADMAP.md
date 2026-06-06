@@ -9,34 +9,31 @@ a **light-gate** at each biome's end opens the next world.
 
 ---
 
-## ✅ Done
-- **M1** Project scaffolding
-- **M2** Canvas + game loop
-- **M3** Player creature (organic glow membrane)
-- **M4** Particle field (cool ocean palette)
+**Now an OPEN-WORLD ACTION platformer.** Three resources: **HP** (health), **Light**
+(fuels dash/flare/weapon), **Shells** (currency). Controls (Scheme B): Left = Pulse-Jet
+move · Right = Burst-Dash · Space = fire water torpedo · F = Flare · E = Talk.
 
-## Phase 1 — The Movement Feel
-- **M5** Movement physics (momentum, water drag, buoyant sink) + follow-camera
-- **M6** Pulse-Jet propulsion (charge & release; membrane contracts)
+## ✅ Done — Movement & World (M1–M11)
+Scaffold · loop · creature · particles · movement physics + camera · Pulse-Jet slingshot ·
+level collision · ocean atmosphere · Bloom (dash/flare/darkness) · tether (deferred to Forest) ·
+hazards/checkpoints/light-gate. Ocean redesigned to OPEN water (islands, currents, no corridor).
 
-## Phase 2 — The World to Move Through
-- **M7** Level geometry & collision (coral ledges, rock walls — data-defined)
-- **M8** Ocean atmosphere as parallax scrolling backdrop
+## Phase: Combat & Open World
+- **M12** HP & damage — health, take damage, death → checkpoint respawn, HP bar
+- **M13** Water Torpedo — fire projectiles toward the cursor (Space)
+- **M14** Enemies — patrol/chase, damage you, have HP, die to torpedoes, drop shells
+- **M15** Shells — currency: world pickups + enemy drops + counter
+- **M16** NPCs & dialogue — approach + talk (E); lore NPC + guide NPC
+- **M17** Upgrade shop — spend shells (launch/dash distance, ability costs, max HP)
+- **M18** Boss gate + Boss fight — unlock after talking to most NPCs & killing most enemies
+- **M19** Full HUD — HP, light, shells, objective marker
 
-## Phase 3 — The Toolkit
-- **M9** Bioluminescent Bloom — glow meter, Burst-Dash, Flare (reveal dark zones)
-- **M10** Tendril Tether — grapple + swing + slingshot
+## Then — New Worlds (metamorphosis)
+- Forest (Wispwing — glide + tether swing) · Desert (Embercoil) · Space (Starjelly) · …
+- Each new zone reuses combat + NPCs + shells; adds its own form, physics, signature ability.
 
-## Phase 4 — Goal & Payoff
-- **M11** Hazards, anemone checkpoints, the light-gate goal
-- **M12** Adaptive evolution + the Forest (metamorphosis: new form + physics + ability)
-
-## Phase 5 — Finish
-- **M13** HUD & UI · **M14** Generative audio · **M15** Polish & performance
-- **M16** Mobile & touch · **M17** GitHub Pages deploy
-
-## 🌌 Beyond — new worlds (each ≈ add biome + form data + a level)
-Desert (Embercoil) · Space (Starjelly) · Caves · Volcano · Sky …
+## Later — Finish
+Generative audio · polish & performance · mobile & touch · GitHub Pages deploy.
 
 ---
 

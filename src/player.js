@@ -44,8 +44,15 @@ export class Player {
     this.dashCost = 35;
     this.flareCost = 30;
     this.dashSpeed = 24;       // dash exceeds normal top speed (a hard lunge)
-    this.invuln = 0;           // i-frame timer (ms) during a dash
+    this.invuln = 0;           // damage-immunity timer (ms): dash + post-hit mercy
+    this.dashTime = 0;         // dash speed-window timer (separate from i-frames)
     this.flareTime = 0;        // 1 -> 0 flare animation
+
+    // --- Health ---
+    this.maxHp = 100;
+    this.hp = this.maxHp;
+    this.dead = false;
+    this.hurtFlash = 0;        // 1 -> 0 red flash when damaged
 
     // --- Tendril Tether: swing from an anchor ---
     this.tetherAnchor = null;  // {x, y} while grappling, else null
@@ -107,7 +114,7 @@ export class Player {
     const drag = Math.pow(this.drag, dtf);
     this.vx *= drag;
     this.vy *= drag;
-    const cap = this.invuln > 0 ? this.dashSpeed : this.maxSpeed;
+    const cap = this.dashTime > 0 ? this.dashSpeed : this.maxSpeed;
     const sp = Math.hypot(this.vx, this.vy);
     if (sp > cap) {
       this.vx = (this.vx / sp) * cap;
@@ -142,7 +149,9 @@ export class Player {
       this.releaseAnim = Math.max(0, this.releaseAnim - dtf * 0.09);
     }
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - deltaTime);
+    if (this.dashTime > 0) this.dashTime = Math.max(0, this.dashTime - deltaTime);
     if (this.flareTime > 0) this.flareTime = Math.max(0, this.flareTime - deltaTime * 0.0014);
+    if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - deltaTime * 0.003);
   }
 
   /** Add absorbed light to the meter (capped). */
@@ -159,6 +168,7 @@ export class Player {
     this.vx = (dx / len) * this.dashSpeed;
     this.vy = (dy / len) * this.dashSpeed;
     this.invuln = 380;
+    this.dashTime = 380;
     this.releaseAnim = 1;
     this.shockX = this.x;
     this.shockY = this.y;
@@ -173,6 +183,16 @@ export class Player {
     return true;
   }
 
+  /** Take damage unless protected (dash/post-hit i-frames). Returns true if it landed. */
+  damage(amount) {
+    if (this.invuln > 0 || this.dead) return false;
+    this.hp -= amount;
+    this.invuln = 600;     // mercy i-frames after a hit
+    this.hurtFlash = 1;
+    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    return true;
+  }
+
   /** Grab an anchor; the current distance becomes the taut rope length. */
   attachTether(anchor) {
     this.tetherAnchor = anchor;
@@ -184,7 +204,7 @@ export class Player {
     this.tetherAnchor = null;
   }
 
-  /** Teleport to a respawn point, fully at rest. */
+  /** Teleport to a respawn point, fully restored and at rest. */
   respawnAt(x, y) {
     this.x = x;
     this.y = y;
@@ -193,6 +213,9 @@ export class Player {
     this.charging = false;
     this.charge = 0;
     this.tetherAnchor = null;
+    this.hp = this.maxHp;
+    this.dead = false;
+    this.invuln = 700;   // brief safety on respawn
   }
 
   /**

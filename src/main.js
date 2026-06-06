@@ -51,13 +51,10 @@ window.addEventListener('pointerup', (e) => { if (e.button !== 2) game.input.thr
 window.addEventListener('pointercancel', () => { game.input.thrusting = false; });
 window.addEventListener('contextmenu', (e) => e.preventDefault()); // free up right-click
 
-// Keyboard: Space = Burst-Dash toward the cursor, F = Flare.
-// (Tether/Shift is deferred to the Forest biome.)
+// Keyboard: F = Flare, R = respawn. (Space becomes the torpedo in M13;
+// right-click stays Burst-Dash. Tether/Shift is deferred to the Forest.)
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
-    e.preventDefault();
-    game.player.burstDash(game.input.aimX, game.input.aimY);
-  } else if (e.key === 'f' || e.key === 'F') {
+  if (e.key === 'f' || e.key === 'F') {
     game.player.flare();
   } else if (e.key === 'r' || e.key === 'R') {
     game.respawn();   // back to the last checkpoint

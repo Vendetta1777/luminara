@@ -55,16 +55,14 @@ export class Level {
       }
     }
 
-    // Hazards — knock the creature away and drain light, unless invulnerable
-    // (a dash's i-frames punch straight through).
+    // Hazards — damage + knock the creature away, unless invulnerable
+    // (a dash's i-frames punch straight through). damage() handles i-frames.
     for (const hz of this.hazards) {
       const dx = player.x - hz.x, dy = player.y - hz.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (d < player.size + hz.r && player.invuln <= 0) {
+      if (d < player.size + hz.r && player.damage(18)) {
         player.vx = (dx / d) * 13;
         player.vy = (dy / d) * 13;
-        player.light = Math.max(0, player.light - 12);
-        player.invuln = 260;   // brief mercy window so you're not re-hit
         hazardHit = true;
       }
     }

@@ -148,6 +148,11 @@ export class Game {
     if (ev.hazardHit) this.camera.triggerShake(7);
     if (ev.gateOpened) console.log('Light-gate opened — the path to the next world awaits.');
 
+    if (this.player.dead) {
+      this.respawn();                 // back to the last checkpoint, restored
+      this.camera.triggerShake(10);
+    }
+
     this.camera.updateShake(deltaTime);
     this.camera.follow(this.player.x, this.player.y, this.width, this.height, deltaTime);
     this.particles.update(deltaTime, this.player, this._view());
@@ -172,8 +177,37 @@ export class Game {
       this.width, this.height, lightRadius);
 
     this.world.drawOverlay(ctx, this.width, this.height);
+
+    // Red flash when the creature takes damage.
+    if (this.player.hurtFlash > 0) {
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 40, 60, ${0.35 * this.player.hurtFlash})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+
     this._drawFps(ctx);          // HUD stays screen-fixed
+    this._drawHpBar(ctx);
     this._drawLightMeter(ctx);
+  }
+
+  /** Temporary HP bar (full HUD arrives in Milestone 19). */
+  _drawHpBar(ctx) {
+    const p = this.player;
+    const x = 12, y = this.height - 40, w = 160, h = 7;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.fillRect(x, y, w, h);
+    const frac = Math.max(0, p.hp / p.maxHp);
+    const col = frac > 0.5 ? '#67e58a' : frac > 0.25 ? '#f5c451' : '#ff5d73';
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, w * frac, h);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '11px monospace';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('hp', x, y - 3);
+    ctx.restore();
   }
 
   /** Temporary glow-meter readout (the full HUD arrives in Milestone 13). */
