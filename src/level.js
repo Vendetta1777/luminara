@@ -102,16 +102,24 @@ export class Level {
    * the velocity going INTO each surface so it slides instead of sticking.
    */
   collide(player) {
-    const r = player.size;
+    return this.collideCircle(player, player.size, this.restitution);
+  }
+
+  /**
+   * Push a circular body {x, y, vx, vy} out of every solid it overlaps and
+   * strip the velocity into each surface (slide), bouncing by `restitution`.
+   * Used by the player (bouncy) and enemies (restitution 0 = no phasing).
+   * Returns the largest into-surface speed this frame (drives camera shake).
+   */
+  collideCircle(o, radius, restitution) {
     let maxImpact = 0;
     for (const s of this.solids) {
-      // Closest point on the rectangle to the creature's centre.
-      const cx = clamp(player.x, s.left, s.right);
-      const cy = clamp(player.y, s.top, s.bottom);
-      let dx = player.x - cx;
-      let dy = player.y - cy;
+      const cx = clamp(o.x, s.left, s.right);
+      const cy = clamp(o.y, s.top, s.bottom);
+      let dx = o.x - cx;
+      let dy = o.y - cy;
       let d2 = dx * dx + dy * dy;
-      if (d2 > r * r) continue;   // no overlap
+      if (d2 > radius * radius) continue;   // no overlap
 
       let dist, nx, ny;
       if (d2 > 0.0001) {
@@ -119,30 +127,27 @@ export class Level {
         nx = dx / dist;
         ny = dy / dist;
       } else {
-        // Centre is inside the rect — push out along the shallowest axis.
-        const toLeft = player.x - s.left;
-        const toRight = s.right - player.x;
-        const toTop = player.y - s.top;
-        const toBottom = s.bottom - player.y;
+        // Centre inside the rect — push out along the shallowest axis.
+        const toLeft = o.x - s.left;
+        const toRight = s.right - o.x;
+        const toTop = o.y - s.top;
+        const toBottom = s.bottom - o.y;
         const minX = Math.min(toLeft, toRight);
         const minY = Math.min(toTop, toBottom);
         if (minX < minY) { nx = toLeft < toRight ? -1 : 1; ny = 0; dist = -minX; }
         else { nx = 0; ny = toTop < toBottom ? -1 : 1; dist = -minY; }
       }
 
-      // Push out so the creature just rests against the surface.
-      player.x += nx * (r - dist);
-      player.y += ny * (r - dist);
-
-      // Remove velocity into the surface, then bounce back by `restitution`.
-      const vn = player.vx * nx + player.vy * ny;
+      o.x += nx * (radius - dist);
+      o.y += ny * (radius - dist);
+      const vn = o.vx * nx + o.vy * ny;
       if (vn < 0) {
         if (-vn > maxImpact) maxImpact = -vn;
-        player.vx -= (1 + this.restitution) * vn * nx;
-        player.vy -= (1 + this.restitution) * vn * ny;
+        o.vx -= (1 + restitution) * vn * nx;
+        o.vy -= (1 + restitution) * vn * ny;
       }
     }
-    return maxImpact;   // largest into-surface speed this frame (drives shake)
+    return maxImpact;
   }
 
   /** Draw every solid + anchor that intersects the view. */

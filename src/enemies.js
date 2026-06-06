@@ -69,7 +69,7 @@ class Darter extends Enemy {
   constructor(x, y) {
     super(x, y);
     this.radius = 14;
-    this.hp = this.maxHp = 30;
+    this.hp = this.maxHp = 20;     // dies to a single torpedo (22 dmg)
     this.contactDmg = 14;
     this.color = '#ff8a4c';
     this.dartTimer = Math.random() * 2000;
@@ -80,7 +80,7 @@ class Darter extends Enemy {
     this.wanderPhase = Math.random() * TAU;
   }
 
-  update(dt, player) {
+  update(dt, player, level) {
     const dtf = dt / 16.6667;
     let maxsp;
 
@@ -114,6 +114,7 @@ class Darter extends Enemy {
     this.x += this.vx * dtf;
     this.y += this.vy * dtf;
 
+    if (level) level.collideCircle(this, this.radius, 0);   // no phasing through rock
     this._contact(player);
     this._decay(dt);
   }
@@ -163,7 +164,7 @@ class Gatekeeper extends Enemy {
     this.color = '#ff5d73';
   }
 
-  update(dt, player) {
+  update(dt, player, level) {
     const dtf = dt / 16.6667;
     const d = Math.hypot(player.x - this.x, player.y - this.y) || 1;
     const chasing = d < 280;
@@ -181,6 +182,7 @@ class Gatekeeper extends Enemy {
     this.x += this.vx * dtf;
     this.y += this.vy * dtf;
 
+    if (level) level.collideCircle(this, this.radius, 0);   // no phasing through rock
     this._contact(player);
     this._decay(dt);
   }
