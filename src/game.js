@@ -9,6 +9,7 @@ import { Camera } from './camera.js';
 import { createOceanLevel } from './level.js';
 import { World } from './world.js';
 import { ProjectileSystem } from './projectiles.js';
+import { EnemySystem } from './enemies.js';
 
 export class Game {
   /**
@@ -43,8 +44,9 @@ export class Game {
     // Steering input in WORLD coordinates, written by main.js each event.
     this.input = { thrusting: false, firing: false, aimX: this.player.x, aimY: this.player.y };
 
-    // Water-torpedo projectiles.
+    // Water-torpedo projectiles + hostile creatures.
     this.projectiles = new ProjectileSystem();
+    this.enemies = new EnemySystem(this.level.enemySpawns);
 
     // Follow-camera, snapped to frame the creature at startup (no opening jolt).
     this.camera = new Camera();
@@ -99,6 +101,8 @@ export class Game {
       range: p.torpedoRange, damage: p.torpedoDamage, radius: 7, team: 'player',
     });
     p.fireCooldown = p.fireRate;
+    p.fireAnim = 1;
+    p.fireDir = { x: ux, y: uy };
     p.vx -= ux * 1.2;   // gentle recoil
     p.vy -= uy * 1.2;
   }
@@ -161,7 +165,8 @@ export class Game {
   update(deltaTime) {
     if (this.input.firing) this.fire();
     this.player.update(deltaTime, this.input);
-    this.projectiles.update(deltaTime, this.level);
+    this.enemies.update(deltaTime, this.player, this.level);
+    this.projectiles.update(deltaTime, this.level, this.enemies.list);
     const impact = this.level.collide(this.player);
     if (impact > 6) this.camera.triggerShake(Math.min(9, impact * 0.6));
 
@@ -189,6 +194,7 @@ export class Game {
     this.camera.apply(ctx);
     this.particles.draw(ctx);          // ambient motes (behind the rock)
     this.level.draw(ctx, this._view(), this.player); // coral geometry + anchors
+    this.enemies.draw(ctx, this._view());            // hostile creatures
     this.player.draw(ctx);             // creature on top
     this.projectiles.draw(ctx);        // torpedoes over everything in-world
     ctx.restore();

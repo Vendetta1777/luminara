@@ -60,6 +60,8 @@ export class Player {
     this.torpedoSpeed = 11;
     this.torpedoDamage = 22;
     this.torpedoRange = 540;
+    this.fireAnim = 0;         // 1 -> 0 muzzle-flash animation
+    this.fireDir = { x: 1, y: 0 };  // last fire direction
 
     // --- Tendril Tether: swing from an anchor ---
     this.tetherAnchor = null;  // {x, y} while grappling, else null
@@ -160,6 +162,7 @@ export class Player {
     if (this.flareTime > 0) this.flareTime = Math.max(0, this.flareTime - deltaTime * 0.0014);
     if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - deltaTime * 0.003);
     if (this.fireCooldown > 0) this.fireCooldown = Math.max(0, this.fireCooldown - deltaTime);
+    if (this.fireAnim > 0) this.fireAnim = Math.max(0, this.fireAnim - deltaTime * 0.006);
   }
 
   /** Add absorbed light to the meter (capped). */
@@ -484,6 +487,40 @@ export class Player {
       ctx.beginPath();
       ctx.arc(this.x, this.y, ringR, 0, TAU);
       ctx.fill();
+    }
+
+    // 11. Muzzle flash — a bright burst + sprayed droplets when firing.
+    if (this.fireAnim > 0) {
+      const fdx = this.fireDir.x, fdy = this.fireDir.y;
+      const mx = this.x + fdx * radius * 1.1;
+      const my = this.y + fdy * radius * 1.1;
+      const fr = radius * (0.7 + 1.3 * this.fireAnim);
+      const flash = ctx.createRadialGradient(mx, my, 0, mx, my, fr);
+      flash.addColorStop(0, hexToRgba('#ffffff', 0.85 * this.fireAnim));
+      flash.addColorStop(0.4, hexToRgba('#8af0ff', 0.5 * this.fireAnim));
+      flash.addColorStop(1, hexToRgba('#8af0ff', 0));
+      ctx.fillStyle = flash;
+      ctx.beginPath();
+      ctx.arc(mx, my, fr, 0, TAU);
+      ctx.fill();
+
+      const perpX = -fdy, perpY = fdx;
+      for (let k = -1; k <= 1; k++) {
+        const sdx = fdx + perpX * k * 0.45;
+        const sdy = fdy + perpY * k * 0.45;
+        const sl = Math.hypot(sdx, sdy) || 1;
+        const dist = radius * 1.5 + (1 - this.fireAnim) * 34;
+        const dx2 = this.x + (sdx / sl) * dist;
+        const dy2 = this.y + (sdy / sl) * dist;
+        const dr = Math.max(0.6, 4 * this.fireAnim);
+        const drop = ctx.createRadialGradient(dx2, dy2, 0, dx2, dy2, dr);
+        drop.addColorStop(0, hexToRgba('#ffffff', 0.7 * this.fireAnim));
+        drop.addColorStop(1, hexToRgba('#8af0ff', 0));
+        ctx.fillStyle = drop;
+        ctx.beginPath();
+        ctx.arc(dx2, dy2, dr, 0, TAU);
+        ctx.fill();
+      }
     }
 
     ctx.restore();

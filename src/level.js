@@ -447,6 +447,18 @@ export function createOceanLevel() {
     { x: 0, y: 200 }, { x: -280, y: 1280 }, { x: -60, y: 2520 },
   ].map((c) => ({ ...c, r: 16, active: false, phase: Math.random() * TAU }));
 
+  // Enemies get tougher with depth (shallow darters → deep gatekeepers).
+  level.enemySpawns = [
+    { x: -300, y: 480, type: 'darter' },
+    { x: 250, y: 760, type: 'darter' },
+    { x: -150, y: 1150, type: 'darter' },
+    { x: 320, y: 1450, type: 'darter' },
+    { x: 0, y: 1750, type: 'gatekeeper' },
+    { x: -350, y: 2050, type: 'darter' },
+    { x: 220, y: 2300, type: 'darter' },
+    { x: 0, y: 2620, type: 'gatekeeper' },
+  ];
+
   level.gate = { x: 0, y: 2890, r: 72, charge: 0, required: 80, open: false };
   level.respawn = { ...spawn };
   return level;
